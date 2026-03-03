@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>OSTIE - Consultation</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+<h2>Consultation Collaborateur</h2>
+
+<label>Collaborateur</label>
+<select id="collaborateur"></select>
+
+<label>Date</label>
+<input type="date" id="date">
+
+<label>Heure de sortie</label>
+<input type="time" id="heureSortie">
+
+<label>Retour ?</label>
+<select id="retour">
+<option value="non">Non</option>
+<option value="oui">Oui</option>
+</select>
+
+<label>Heure de retour</label>
+<input type="time" id="heureRetour" disabled>
+
+<label>Résultat</label>
+<select id="resultat">
+<option value="Consultation médical">Consultation médical</option>
+<option value="Repos médical">Repos médical</option>
+</select>
+
+<label>Nombre de Jour RM</label>
+<input type="number" id="nbJourRM" disabled>
+
+<button id="saveBtn">Enregistrer</button>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
