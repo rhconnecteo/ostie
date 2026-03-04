@@ -80,14 +80,64 @@
 
       <!-- FORMULAIRE -->
       <form id="formConsultation" style="display: none;">
-        <div class="form-group">
-          <label>📅 Date (DD/MM/YYYY)</label>
-          <input type="text" id="date" placeholder="JJ/MM/YYYY" required>
+        <!-- Ligne 1: Date | Heure Sortie -->
+        <div class="form-row">
+          <div class="form-group">
+            <label>📅 Date de consultation</label>
+            <input type="text" id="date" placeholder="JJ/MM/YYYY" required>
+          </div>
+          <div class="form-group">
+            <label>🕐 Heure de sortie</label>
+            <input type="time" id="heureSortie" required>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label>🕐 Heure de sortie</label>
-          <input type="time" id="heureSortie" required>
+        <!-- Ligne 2: Type Consultation | Lieu Consultation -->
+        <div class="form-row">
+          <div class="form-group">
+            <label>🏥 Type de consultation</label>
+            <select id="typeConsultation" required>
+              <option value="" disabled selected>-- Sélectionner --</option>
+              <option value="Visite médical">Visite médical</option>
+              <option value="Simple consultation">Simple consultation</option>
+              <option value="Rendez vous">Rendez vous</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>📍 Lieu de consultation</label>
+            <select id="lieuConsultation" required>
+              <option value="" disabled selected>-- Sélectionner --</option>
+              <option value="Connecteo">Connecteo</option>
+              <option value="Andranomena">Andranomena</option>
+              <option value="Autres">Autres</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Ligne 3: Shift | Retour Immédiat -->
+        <div class="form-row">
+          <div class="form-group">
+            <label>🌙 Shift</label>
+            <select id="shift" required>
+              <option value="" disabled selected>-- Sélectionner --</option>
+              <option value="Jour">Jour</option>
+              <option value="Nuit">Nuit</option>
+            </select>
+          </div>
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">✅ Retour immédiat?</label>
+            <div class="checkbox-wrapper">
+              <input type="checkbox" id="retourImmediately">
+            </div>
+          </div>
+        </div>
+
+        <!-- Heure Retour (caché par défaut) -->
+        <div class="form-row" id="heureRetourGroup" style="display: none;">
+          <div class="form-group">
+            <label>🕐 Heure de retour</label>
+            <input type="time" id="heureRetour" disabled>
+          </div>
         </div>
 
         <button type="submit" id="btnSave" class="btn-save">✓ Enregistrer</button>

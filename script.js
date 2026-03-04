@@ -1,7 +1,8 @@
 document.addEventListener("DOMContentLoaded", function () {
 
-  const API_URL = "https://script.google.com/macros/s/AKfycbxqUN1Lmr71097XT5vBnNlk1ZUjK6ltQG3GEfYulYufyLhI1OBGIFD_9zVREJn80EZPmA/exec";
+  const API_URL = "https://script.google.com/macros/s/AKfycbyK-ftTqAocYh7HI8HDV64Dtj1S2BpxCzphKdIbUP3hvALbnM0Wqvl7oV5Akoev7Eo74w/exec";
   
+
   // ================= STATE =================
   let isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
   let allCollaborateurs = [];
@@ -84,6 +85,12 @@ document.addEventListener("DOMContentLoaded", function () {
   const formConsultation = document.getElementById("formConsultation");
   const dateInput = document.getElementById("date");
   const heureSortieInput = document.getElementById("heureSortie");
+  const typeConsultationSelect = document.getElementById("typeConsultation");
+  const lieuConsultationSelect = document.getElementById("lieuConsultation");
+  const shiftSelect = document.getElementById("shift");
+  const retourImmediatelyCheckbox = document.getElementById("retourImmediately");
+  const heureRetourGroup = document.getElementById("heureRetourGroup");
+  const heureRetourInput = document.getElementById("heureRetour");
   const btnSave = document.getElementById("btnSave");
   const successMessage = document.getElementById("successMessage");
 
@@ -106,6 +113,36 @@ document.addEventListener("DOMContentLoaded", function () {
   setInterval(rotateSlogan, 6000);
 
   // ================= HELPER FUNCTIONS =================
+  // Extraire l'heure d'un format ISO (ex: "1899-12-30T15:00:00.000Z" → "15:00:00")
+  function extractTimeFromISO(isoDateTime) {
+    if (!isoDateTime || typeof isoDateTime !== "string") return "-";
+    if (isoDateTime.includes("T")) {
+      const time = isoDateTime.split("T")[1];
+      if (time) {
+        return time.split(".")[0]; // Retourne HH:MM:SS
+      }
+    }
+    return isoDateTime;
+  }
+
+  // Extraire et corriger la date d'un format ISO (ex: "2026-04-03T15:00:00Z" → "2026-04-04")
+  function extractAndCorrectDate(isoDateTime) {
+    if (!isoDateTime || typeof isoDateTime !== "string") return "-";
+    if (isoDateTime.includes("T")) {
+      const date = isoDateTime.split("T")[0]; // 2026-04-03
+      const parts = date.split("-");
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        d.setDate(d.getDate() + 1); // Ajouter 1 jour pour corriger le décalage
+        const newYear = d.getFullYear();
+        const newMonth = String(d.getMonth() + 1).padStart(2, "0");
+        const newDay = String(d.getDate()).padStart(2, "0");
+        return `${newYear}-${newMonth}-${newDay}`;
+      }
+    }
+    return isoDateTime;
+  }
+
   function getTodayMadagascar() {
     // Retourner la date d'aujourd'hui au format YYYY-MM-DD
     // Utiliser simplement le fuseau horaire du navigateur (qui doit être en Madagascar)
@@ -312,6 +349,14 @@ document.addEventListener("DOMContentLoaded", function () {
     fonctionSpan.textContent = c.fonction || "-";
     rattachementSpan.textContent = c.rattachement || "-";
 
+    // Réinitialiser les nouveaux champs
+    typeConsultationSelect.value = "";
+    lieuConsultationSelect.value = "";
+    shiftSelect.value = "";
+    retourImmediatelyCheckbox.checked = false;
+    heureRetourGroup.style.display = "none";
+    heureRetourInput.value = "";
+
     formConsultation.style.display = "block";
     setDateTimeNow();
   });
@@ -333,8 +378,42 @@ document.addEventListener("DOMContentLoaded", function () {
       return false;
     }
 
+    if (!typeConsultationSelect.value) {
+      showMessage("❌ Sélectionnez le type de consultation", "error");
+      return false;
+    }
+
+    if (!lieuConsultationSelect.value) {
+      showMessage("❌ Sélectionnez le lieu de consultation", "error");
+      return false;
+    }
+
+    if (!shiftSelect.value) {
+      showMessage("❌ Sélectionnez le shift", "error");
+      return false;
+    }
+
+    if (retourImmediatelyCheckbox.checked && !heureRetourInput.value) {
+      showMessage("❌ Entrez l'heure de retour", "error");
+      return false;
+    }
+
     return true;
   }
+
+  // ================= RETOUR IMMEDIATELY CHECKBOX =================
+  retourImmediatelyCheckbox.addEventListener("change", function () {
+    if (this.checked) {
+      heureRetourGroup.style.display = "block";
+      heureRetourInput.disabled = false;
+      const now = getCurrentDateTime();
+      heureRetourInput.value = now.time;
+    } else {
+      heureRetourGroup.style.display = "none";
+      heureRetourInput.value = "";
+      heureRetourInput.disabled = true;
+    }
+  });
 
   // ================= SAVE CONSULTATION =================
   formConsultation.addEventListener("submit", async function (e) {
@@ -351,8 +430,13 @@ document.addEventListener("DOMContentLoaded", function () {
       prenom: c.prenom || "",
       fonction: c.fonction,
       rattachement: c.rattachement,
-      date: convertDateToISO(dateInput.value),
-      heureSortie: heureSortieInput.value
+      typeConsultation: typeConsultationSelect.value,
+      lieuConsultation: lieuConsultationSelect.value,
+      shift: shiftSelect.value,
+      dateSortie: convertDateToISO(dateInput.value),
+      heureSortie: heureSortieInput.value,
+      heureRetour: retourImmediatelyCheckbox.checked ? heureRetourInput.value : "",
+      retourImmediatelyChecked: retourImmediatelyCheckbox.checked
     });
 
     try {
@@ -389,6 +473,13 @@ document.addEventListener("DOMContentLoaded", function () {
     formConsultation.style.display = "none";
     dateInput.value = "";
     heureSortieInput.value = "";
+    typeConsultationSelect.value = "";
+    lieuConsultationSelect.value = "";
+    shiftSelect.value = "";
+    retourImmediatelyCheckbox.checked = false;
+    heureRetourGroup.style.display = "none";
+    heureRetourInput.value = "";
+    heureRetourInput.disabled = true;
     btnSave.disabled = false;
     btnSave.textContent = "✓ Enregistrer";
   }
@@ -418,10 +509,10 @@ document.addEventListener("DOMContentLoaded", function () {
     console.log("Date d'aujourd'hui (ISO):", todayISO);
     console.log("Total consultations en base:", allConsultations.length);
     
-    // Filtrer SEULEMENT les consultations d'aujourd'hui (jour J)
+    // Filtrer SEULEMENT les consultations d'aujourd'hui (jour J) avec date corrigée
     const todayConsultations = allConsultations.filter(c => {
-      const consultationDate = c.date ? c.date.split("T")[0] : "";
-      return consultationDate === todayISO;
+      const correctedDate = extractAndCorrectDate(c.date);
+      return correctedDate === todayISO;
     });
     
     console.log("Consultations d'aujourd'hui:", todayConsultations.length);
@@ -465,8 +556,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // Chart Jours
     const consultationParJour = {};
     allConsultations.forEach(c => {
-      // Extraire la date en format ISO (YYYY-MM-DD) depuis c.date
-      const dateKey = c.date ? c.date.split("T")[0] : "";
+      // Extraire et corriger la date en format ISO (YYYY-MM-DD) depuis c.date
+      const correctedDate = extractAndCorrectDate(c.date);
+      const dateKey = correctedDate !== "-" ? correctedDate : "";
       consultationParJour[dateKey] = (consultationParJour[dateKey] || 0) + 1;
     });
 
@@ -519,7 +611,10 @@ document.addEventListener("DOMContentLoaded", function () {
           <div class="pending-name">👤 ${c.nom} ${c.prenom || ""}</div>
           <div class="pending-details">
             <span>📍 Matricule: ${c.matricule}</span> |
-            <span>🕐 Sortie: ${c.heureSortie}</span>
+            <span>🕐 Sortie: ${extractTimeFromISO(c.heureSortie)}</span> |
+            <span>🏥 ${c.typeConsultation}</span> |
+            <span>📍 ${c.lieuConsultation}</span> |
+            <span>🌙 ${c.shift}</span>
           </div>
         </div>
         <div class="pending-actions">
