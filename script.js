@@ -1,8 +1,6 @@
 document.addEventListener("DOMContentLoaded", function () {
 
-  const API_URL = "https://script.google.com/macros/s/AKfycbyK-ftTqAocYh7HI8HDV64Dtj1S2BpxCzphKdIbUP3hvALbnM0Wqvl7oV5Akoev7Eo74w/exec";
-  
-
+  const API_URL = "https://script.google.com/macros/s/AKfycbxUum4GRBehyXS-iWGunLTWP7GwAdewFJKTn79TbMLSRGyns26eMGpE7ZNJp1M6vK21FA/exec";
   // ================= STATE =================
   let isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
   let allCollaborateurs = [];
@@ -87,6 +85,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const heureSortieInput = document.getElementById("heureSortie");
   const typeConsultationSelect = document.getElementById("typeConsultation");
   const lieuConsultationSelect = document.getElementById("lieuConsultation");
+  const choixSelect = document.getElementById("choix");
   const shiftSelect = document.getElementById("shift");
   const retourImmediatelyCheckbox = document.getElementById("retourImmediately");
   const heureRetourGroup = document.getElementById("heureRetourGroup");
@@ -99,6 +98,34 @@ document.addEventListener("DOMContentLoaded", function () {
   const statEnAttente = document.getElementById("statEnAttente");
   const statRepos = document.getElementById("statRepos");
   const pendingList = document.getElementById("pendingList");
+  const filterFromDate = document.getElementById("filterFromDate");
+  const filterToDate = document.getElementById("filterToDate");
+  const btnFilterReport = document.getElementById("btnFilterReport");
+  const btnResetReport = document.getElementById("btnResetReport");
+  const btnPreviousDay = document.getElementById("btnPreviousDay");
+  const btnReposHistory = document.getElementById("btnReposHistory");
+  const reportTableBody = document.getElementById("reportTableBody");
+  
+  // Report Stats Elements
+  const reportStatTotal = document.getElementById("reportStatTotal");
+  const reportStatRM = document.getElementById("reportStatRM");
+  const reportStatConsult = document.getElementById("reportStatConsult");
+  const reportStatDayoff = document.getElementById("reportStatDayoff");
+  
+  // Report Chart Elements
+  let chartReportResultats = null;
+  let chartReportLieu = null;
+  let chartReportChoix = null;
+  let chartReportShift = null;
+  let chartReportRattachement = null;
+  let chartReportFonction = null;
+  
+  // Waiting List Elements
+  const waitingSection = document.getElementById("waitingSection");
+  const waitingList = document.getElementById("waitingList");
+  const waitingCount = document.getElementById("waitingCount");
+  const btnAddToWaiting = document.getElementById("btnAddToWaiting");
+  let waitingPersonnes = []; // Stocke les personnes en attente
 
   function rotateSlogan() {
     const mottoText = document.getElementById("mottoText");
@@ -266,6 +293,11 @@ document.addEventListener("DOMContentLoaded", function () {
       if (sectionName === "dashboard") {
         loadDashboardData();
       }
+
+      if (sectionName === "rapport") {
+        // Charger tous les consultations du rapport
+        displayReport(allConsultations);
+      }
     });
   });
 
@@ -352,6 +384,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // Réinitialiser les nouveaux champs
     typeConsultationSelect.value = "";
     lieuConsultationSelect.value = "";
+    choixSelect.value = "";
     shiftSelect.value = "";
     retourImmediatelyCheckbox.checked = false;
     heureRetourGroup.style.display = "none";
@@ -388,6 +421,11 @@ document.addEventListener("DOMContentLoaded", function () {
       return false;
     }
 
+    if (!choixSelect.value) {
+      showMessage("❌ Sélectionnez le choix (Day off / Jour)", "error");
+      return false;
+    }
+
     if (!shiftSelect.value) {
       showMessage("❌ Sélectionnez le shift", "error");
       return false;
@@ -415,6 +453,90 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
+  // ================= AJOUTER À LA LISTE D'ATTENTE =================
+  if (btnAddToWaiting) {
+    btnAddToWaiting.addEventListener("click", function () {
+      if (!collaborateurSelect.value) {
+        showMessage("❌ Sélectionnez un collaborateur", "error");
+        return;
+      }
+
+      const c = JSON.parse(collaborateurSelect.value);
+      
+      // Vérifier si déjà en attente
+      if (waitingPersonnes.some(p => p.matricule === c.matricule)) {
+        showMessage("⚠️ Cette personne est déjà en attente", "error");
+        return;
+      }
+
+      waitingPersonnes.push(c);
+      updateWaitingList();
+      showMessage("✅ Ajouté à la liste d'attente");
+      collaborateurSelect.value = "";
+      searchInput.value = "";
+    });
+  }
+
+  function updateWaitingList() {
+    waitingCount.textContent = waitingPersonnes.length;
+    waitingList.innerHTML = "";
+
+    if (waitingPersonnes.length === 0) {
+      waitingSection.style.display = "none";
+      return;
+    }
+
+    waitingSection.style.display = "block";
+
+    waitingPersonnes.forEach((personne, index) => {
+      const item = document.createElement("div");
+      item.className = "waiting-item";
+      item.innerHTML = `
+        <input type="checkbox" class="waiting-checkbox" data-index="${index}">
+        <div class="waiting-item-info">
+          <div class="waiting-item-matricule">${personne.matricule}</div>
+          <div class="waiting-item-nom">${personne.nom}</div>
+        </div>
+      `;
+
+      const checkbox = item.querySelector(".waiting-checkbox");
+      checkbox.addEventListener("change", function () {
+        if (this.checked) {
+          selectFromWaiting(index);
+        }
+      });
+
+      waitingList.appendChild(item);
+    });
+  }
+
+  function selectFromWaiting(index) {
+    const personne = waitingPersonnes[index];
+    
+    // Remplir le formulaire
+    collaborateurSelect.value = JSON.stringify(personne);
+    
+    // Afficher les détails
+    matriculeSpan.textContent = personne.matricule;
+    nomPrenomSpan.textContent = personne.nom;
+    fonctionSpan.textContent = personne.fonction || "-";
+    rattachementSpan.textContent = personne.rattachement || "-";
+    
+    // Remplir heure de sortie automatiquement
+    const todayISO = getTodayMadagascar(); // Format YYYY-MM-DD
+    const now = new Date();
+    const time = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+    
+    dateInput.value = todayISO;
+    heureSortieInput.value = time;
+
+    // Retirer de la liste d'attente
+    waitingPersonnes.splice(index, 1);
+    updateWaitingList();
+
+    showMessage("✅ Personne sélectionnée, veuillez compléter le formulaire");
+  }
+
   // ================= SAVE CONSULTATION =================
   formConsultation.addEventListener("submit", async function (e) {
     e.preventDefault();
@@ -432,6 +554,7 @@ document.addEventListener("DOMContentLoaded", function () {
       rattachement: c.rattachement,
       typeConsultation: typeConsultationSelect.value,
       lieuConsultation: lieuConsultationSelect.value,
+      choix: choixSelect.value,
       shift: shiftSelect.value,
       dateSortie: convertDateToISO(dateInput.value),
       heureSortie: heureSortieInput.value,
@@ -475,6 +598,7 @@ document.addEventListener("DOMContentLoaded", function () {
     heureSortieInput.value = "";
     typeConsultationSelect.value = "";
     lieuConsultationSelect.value = "";
+    choixSelect.value = "";
     shiftSelect.value = "";
     retourImmediatelyCheckbox.checked = false;
     heureRetourGroup.style.display = "none";
@@ -497,6 +621,7 @@ document.addEventListener("DOMContentLoaded", function () {
       updateStatistics();
       updateCharts();
       updatePendingList();
+      displayReport(allConsultations); // Afficher le rapport initial
 
     } catch (e) {
       console.error("Erreur chargement dashboard :", e);
@@ -755,6 +880,367 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     item.disabled = !valid;
+  }
+
+  // ================= RAPPORT CONSULTATIONS PASSÉES =================
+  function displayReport(consultations) {
+    reportTableBody.innerHTML = "";
+
+    if (consultations.length === 0) {
+      reportTableBody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">Aucune consultation trouvée</td></tr>';
+    } else {
+      consultations.forEach(c => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${c.matricule}</td>
+          <td>${c.nom}</td>
+          <td>${c.fonction}</td>
+          <td>${extractAndCorrectDate(c.date)}</td>
+          <td>${c.typeConsultation}</td>
+          <td>${c.lieuConsultation}</td>
+          <td>${c.choix || "-"}</td>
+          <td>${c.shift}</td>
+          <td>${extractTimeFromISO(c.heureSortie)}</td>
+          <td>${c.heureRetour ? extractTimeFromISO(c.heureRetour) : "-"}</td>
+          <td>${c.resultat || "-"}</td>
+          <td>${c.nbJourRM || "-"}</td>
+        `;
+        reportTableBody.appendChild(row);
+      });
+    }
+    
+    updateReportStatistics(consultations);
+    updateReportCharts(consultations);
+  }
+
+  function updateReportStatistics(consultations) {
+    const total = consultations.length;
+    const rm = consultations.filter(c => c.resultat === "Repos médical").length;
+    const consult = consultations.filter(c => c.resultat === "Consultation médical").length;
+    const dayoff = consultations.filter(c => c.choix === "Day off").length;
+
+    reportStatTotal.textContent = total;
+    reportStatRM.textContent = rm;
+    reportStatConsult.textContent = consult;
+    reportStatDayoff.textContent = dayoff;
+  }
+
+  function updateReportCharts(consultations) {
+    if (consultations.length === 0) return;
+
+    // Chart Résultats (Consultation vs Repos)
+    const consultation = consultations.filter(c => c.resultat === "Consultation médical").length;
+    const repos = consultations.filter(c => c.resultat === "Repos médical").length;
+    const total = consultations.length;
+    const autres = total - consultation - repos;
+
+    const ctxResultats = document.getElementById("chartReportResultats")?.getContext("2d");
+    if (ctxResultats) {
+      if (chartReportResultats) chartReportResultats.destroy();
+      
+      chartReportResultats = new Chart(ctxResultats, {
+        type: "doughnut",
+        data: {
+          labels: ["Consultation Médical", "Repos Médical", "Autres"],
+          datasets: [{
+            data: [consultation, repos, autres],
+            backgroundColor: ["#667eea", "#e74c3c", "#f39c12"],
+            borderColor: "#fff",
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: "bottom" },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return context.label + ": " + context.parsed.y;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Chart Lieu
+    const lieuStats = {};
+    consultations.forEach(c => {
+      lieuStats[c.lieuConsultation] = (lieuStats[c.lieuConsultation] || 0) + 1;
+    });
+    const lieus = Object.keys(lieuStats);
+    const lieuCounts = Object.values(lieuStats);
+
+    const ctxLieu = document.getElementById("chartReportLieu")?.getContext("2d");
+    if (ctxLieu) {
+      if (chartReportLieu) chartReportLieu.destroy();
+      
+      chartReportLieu = new Chart(ctxLieu, {
+        type: "bar",
+        data: {
+          labels: lieus,
+          datasets: [{
+            label: "Consultations",
+            data: lieuCounts,
+            backgroundColor: "#667eea",
+            borderColor: "#764ba2",
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          indexAxis: "y",
+          scales: {
+            x: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    // Chart Choix (Day off vs Jour)
+    const dayoff = consultations.filter(c => c.choix === "Day off").length;
+    const jour = consultations.filter(c => c.choix === "Jour").length;
+    const autreChoix = consultations.filter(c => c.choix !== "Day off" && c.choix !== "Jour" && c.choix !== "").length;
+
+    const ctxChoix = document.getElementById("chartReportChoix")?.getContext("2d");
+    if (ctxChoix) {
+      if (chartReportChoix) chartReportChoix.destroy();
+      
+      chartReportChoix = new Chart(ctxChoix, {
+        type: "pie",
+        data: {
+          labels: ["Day off", "Jour", "Autres"],
+          datasets: [{
+            data: [dayoff, jour, autreChoix],
+            backgroundColor: ["#e74c3c", "#3498db", "#95a5a6"],
+            borderColor: "#fff",
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: "bottom" }
+          }
+        }
+      });
+    }
+
+    // Chart Shift - EN HISTOGRAMME
+    const shiftStats = {};
+    consultations.forEach(c => {
+      shiftStats[c.shift] = (shiftStats[c.shift] || 0) + 1;
+    });
+    const shifts = Object.keys(shiftStats);
+    const shiftCounts = Object.values(shiftStats);
+
+    const ctxShift = document.getElementById("chartReportShift")?.getContext("2d");
+    if (ctxShift) {
+      if (chartReportShift) chartReportShift.destroy();
+      
+      chartReportShift = new Chart(ctxShift, {
+        type: "bar",
+        data: {
+          labels: shifts,
+          datasets: [{
+            label: "Consultations",
+            data: shiftCounts,
+            backgroundColor: "#667eea",
+            borderColor: "#764ba2",
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    // Chart Rattachement - Consultation vs RM
+    const rattachementStats = {};
+    consultations.forEach(c => {
+      if (!rattachementStats[c.rattachement]) {
+        rattachementStats[c.rattachement] = { consultation: 0, rm: 0 };
+      }
+      if (c.resultat === "Consultation médical") {
+        rattachementStats[c.rattachement].consultation++;
+      } else if (c.resultat === "Repos médical") {
+        rattachementStats[c.rattachement].rm++;
+      }
+    });
+    const rattachements = Object.keys(rattachementStats);
+    const consultationByRattachement = rattachements.map(r => rattachementStats[r].consultation);
+    const rmByRattachement = rattachements.map(r => rattachementStats[r].rm);
+
+    const ctxRattachement = document.getElementById("chartReportRattachement")?.getContext("2d");
+    if (ctxRattachement) {
+      if (chartReportRattachement) chartReportRattachement.destroy();
+      
+      chartReportRattachement = new Chart(ctxRattachement, {
+        type: "bar",
+        data: {
+          labels: rattachements,
+          datasets: [
+            {
+              label: "Consultation Médical",
+              data: consultationByRattachement,
+              backgroundColor: "#667eea"
+            },
+            {
+              label: "Repos Médical",
+              data: rmByRattachement,
+              backgroundColor: "#e74c3c"
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    // Chart Fonction - Consultation vs RM
+    const fonctionStats = {};
+    consultations.forEach(c => {
+      if (!fonctionStats[c.fonction]) {
+        fonctionStats[c.fonction] = { consultation: 0, rm: 0 };
+      }
+      if (c.resultat === "Consultation médical") {
+        fonctionStats[c.fonction].consultation++;
+      } else if (c.resultat === "Repos médical") {
+        fonctionStats[c.fonction].rm++;
+      }
+    });
+    const fonctions = Object.keys(fonctionStats);
+    const consultationByFonction = fonctions.map(f => fonctionStats[f].consultation);
+    const rmByFonction = fonctions.map(f => fonctionStats[f].rm);
+
+    const ctxFonction = document.getElementById("chartReportFonction")?.getContext("2d");
+    if (ctxFonction) {
+      if (chartReportFonction) chartReportFonction.destroy();
+      
+      chartReportFonction = new Chart(ctxFonction, {
+        type: "bar",
+        data: {
+          labels: fonctions,
+          datasets: [
+            {
+              label: "Consultation Médical",
+              data: consultationByFonction,
+              backgroundColor: "#667eea"
+            },
+            {
+              label: "Repos Médical",
+              data: rmByFonction,
+              backgroundColor: "#e74c3c"
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+  }
+
+  function getFilteredConsultations() {
+    const fromDate = filterFromDate.value ? new Date(filterFromDate.value) : null;
+    const toDate = filterToDate.value ? new Date(filterToDate.value) : null;
+
+    const filtered = allConsultations.filter(c => {
+      const correctedDate = extractAndCorrectDate(c.date);
+      if (!correctedDate || correctedDate === "-") return false;
+
+      const consultDate = new Date(correctedDate);
+
+      if (fromDate && consultDate < fromDate) return false;
+      if (toDate) {
+        const toDateEnd = new Date(toDate);
+        toDateEnd.setDate(toDateEnd.getDate() + 1);
+        if (consultDate >= toDateEnd) return false;
+      }
+
+      return true;
+    });
+
+    return filtered.sort((a, b) => {
+      const dateA = extractAndCorrectDate(a.date);
+      const dateB = extractAndCorrectDate(b.date);
+      return new Date(dateB) - new Date(dateA); // Plus récentes en premier
+    });
+  }
+
+  // Event listeners pour le rapport
+  if (btnFilterReport) {
+    btnFilterReport.addEventListener("click", function () {
+      const filtered = getFilteredConsultations();
+      displayReport(filtered);
+    });
+  }
+
+  if (btnResetReport) {
+    btnResetReport.addEventListener("click", function () {
+      filterFromDate.value = "";
+      filterToDate.value = "";
+      displayReport(allConsultations);
+    });
+  }
+
+  // Bouton Jour Précédent
+  if (btnPreviousDay) {
+    btnPreviousDay.addEventListener("click", function () {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const dateString = yesterday.toISOString().split('T')[0]; // Format YYYY-MM-DD
+      
+      filterFromDate.value = dateString;
+      filterToDate.value = dateString;
+      
+      const filtered = getFilteredConsultations();
+      displayReport(filtered);
+      
+      // Naviguer vers la section rapport
+      navBtns.forEach(b => b.classList.remove("active"));
+      document.querySelector('[data-section="rapport"]').classList.add("active");
+      
+      sections.forEach(s => s.classList.remove("active"));
+      document.getElementById("rapport").classList.add("active");
+    });
+  }
+
+  // Bouton Repos History (dans la zone orange)
+  if (btnReposHistory) {
+    btnReposHistory.addEventListener("click", function () {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const dateString = yesterday.toISOString().split('T')[0]; // Format YYYY-MM-DD
+      
+      filterFromDate.value = dateString;
+      filterToDate.value = dateString;
+      
+      const filtered = getFilteredConsultations();
+      displayReport(filtered);
+      
+      // Naviguer vers la section rapport
+      navBtns.forEach(b => b.classList.remove("active"));
+      document.querySelector('[data-section="rapport"]').classList.add("active");
+      
+      sections.forEach(s => s.classList.remove("active"));
+      document.getElementById("rapport").classList.add("active");
+    });
   }
 
 });

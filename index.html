@@ -36,6 +36,7 @@
       <div class="nav-buttons">
         <button class="nav-btn active" data-section="formulaire">📋 Formulaire</button>
         <button class="nav-btn" data-section="dashboard">📊 Dashboard</button>
+        <button class="nav-btn" data-section="rapport">📅 Rapport</button>
         <button class="nav-btn logout-btn" id="logoutBtn">🚪 Déconnexion</button>
       </div>
     </nav>
@@ -51,11 +52,20 @@
       <h2>📋 Nouvelle Consultation</h2>
       <p class="section-subtitle">Remplissez le formulaire pour enregistrer une nouvelle consultation</p>
 
+      <!-- PERSONNES EN ATTENTE -->
+      <div id="waitingSection" class="waiting-section" style="display: none;">
+        <h3>⏳ Personnes en Attente (<span id="waitingCount">0</span>)</h3>
+        <div id="waitingList" class="waiting-list">
+          <!-- Les personnes en attente s'affichent ici -->
+        </div>
+      </div>
+
       <!-- RECHERCHE COLLABORATEUR -->
       <div class="search-section">
         <label>🔍 Rechercher Collaborateur</label>
         <input type="text" id="searchInput" placeholder="Entrez matricule ou nom...">
         <select id="collaborateur"></select>
+        <button id="btnAddToWaiting" class="btn-add-waiting">⏳ Ajouter à l'attente</button>
       </div>
 
       <!-- DETAILS COLLABORATEUR -->
@@ -99,8 +109,12 @@
             <select id="typeConsultation" required>
               <option value="" disabled selected>-- Sélectionner --</option>
               <option value="Visite médical">Visite médical</option>
-              <option value="Simple consultation">Simple consultation</option>
+              <option value="Consultation simple">Consultation simple</option>
               <option value="Rendez vous">Rendez vous</option>
+              <option value="Analyses médicales">Analyses médicales</option>
+              <option value="Consultation sage femme">Consultation sage femme</option>
+              <option value="Stomatologie">Stomatologie</option>
+              <option value="Autres spécialistes">Autres spécialistes</option>
             </select>
           </div>
           <div class="form-group">
@@ -114,8 +128,16 @@
           </div>
         </div>
 
-        <!-- Ligne 3: Shift | Retour Immédiat -->
+        <!-- Ligne 3: Choix | Shift -->
         <div class="form-row">
+          <div class="form-group">
+            <label>📌 Choix</label>
+            <select id="choix" required>
+              <option value="" disabled selected>-- Sélectionner --</option>
+              <option value="Day off">Day off</option>
+              <option value="Jour">Jour</option>
+            </select>
+          </div>
           <div class="form-group">
             <label>🌙 Shift</label>
             <select id="shift" required>
@@ -124,8 +146,12 @@
               <option value="Nuit">Nuit</option>
             </select>
           </div>
+        </div>
+
+        <!-- Ligne 4: Retour Immédiat -->
+        <div class="form-row">
           <div class="form-group checkbox-group">
-            <label class="checkbox-label">✅ Retour immédiat?</label>
+            <label class="checkbox-label">✅ Sans Retour?</label>
             <div class="checkbox-wrapper">
               <input type="checkbox" id="retourImmediately">
             </div>
@@ -166,6 +192,7 @@
         <div class="stat-card stat-repos">
           <h3>🩺 Repos Médical</h3>
           <p id="statRepos" class="stat-value">0</p>
+          <button id="btnReposHistory" class="btn-stat-action">📊 Jour Précédent</button>
         </div>
       </div>
 
@@ -186,6 +213,105 @@
         <h3>⏳ Personnes en attente de retour</h3>
         <div id="pendingList" class="pending-list">
           <!-- Les données s'affichent ici -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== RAPPORT SECTION ============== -->
+  <section id="rapport" class="section">
+    <div class="container">
+      <h2>📅 Rapport Consultations Passées</h2>
+      <p class="section-subtitle">Analyse détaillée des consultations</p>
+
+      <div class="report-section" style="margin-top: 0; box-shadow: none; padding: 0;">
+        <div class="filter-section">
+          <div class="filter-row">
+            <div class="filter-group">
+              <label>📅 De:</label>
+              <input type="date" id="filterFromDate">
+            </div>
+            <div class="filter-group">
+              <label>📅 À:</label>
+              <input type="date" id="filterToDate">
+            </div>
+            <button id="btnFilterReport" class="btn-filter">🔍 Filtrer</button>
+            <button id="btnResetReport" class="btn-reset">↺ Réinitialiser</button>
+            <button id="btnPreviousDay" class="btn-previous">📅 Jour Précédent</button>
+          </div>
+        </div>
+
+        <!-- STATISTIQUES RAPPORT -->
+        <div class="report-stats-grid">
+          <div class="report-stat-card">
+            <h4>👥 Total Consultations</h4>
+            <p id="reportStatTotal" class="report-stat-value">0</p>
+          </div>
+          <div class="report-stat-card">
+            <h4>🩺 Repos Médical</h4>
+            <p id="reportStatRM" class="report-stat-value">0</p>
+          </div>
+          <div class="report-stat-card">
+            <h4>⚕️ Consultation Médical</h4>
+            <p id="reportStatConsult" class="report-stat-value">0</p>
+          </div>
+          <div class="report-stat-card">
+            <h4>📌 Day Off</h4>
+            <p id="reportStatDayoff" class="report-stat-value">0</p>
+          </div>
+        </div>
+
+        <!-- GRAPHIQUES RAPPORT -->
+        <div class="report-charts-grid">
+          <div class="chart-container">
+            <h4>📊 Répartition Résultats</h4>
+            <canvas id="chartReportResultats"></canvas>
+          </div>
+          <div class="chart-container">
+            <h4>📍 Consultations par Lieu</h4>
+            <canvas id="chartReportLieu"></canvas>
+          </div>
+          <div class="chart-container">
+            <h4>📌 Répartition Choix</h4>
+            <canvas id="chartReportChoix"></canvas>
+          </div>
+          <div class="chart-container">
+            <h4>🌙 Répartition Shift (Histogramme)</h4>
+            <canvas id="chartReportShift"></canvas>
+          </div>
+          <div class="chart-container">
+            <h4>🏢 Consultation/RM par Rattachement</h4>
+            <canvas id="chartReportRattachement"></canvas>
+          </div>
+          <div class="chart-container">
+            <h4>👔 Consultation/RM par Fonction</h4>
+            <canvas id="chartReportFonction"></canvas>
+          </div>
+        </div>
+
+        <!-- TABLEAU RAPPORT -->
+        <div class="table-container">
+          <table id="reportTable" class="report-table">
+            <thead>
+              <tr>
+                <th>Matricule</th>
+                <th>Nom</th>
+                <th>Fonction</th>
+                <th>Date</th>
+                <th>Type Consultation</th>
+                <th>Lieu</th>
+                <th>Choix</th>
+                <th>Shift</th>
+                <th>Heure Sortie</th>
+                <th>Heure Retour</th>
+                <th>Résultat</th>
+                <th>Jours RM</th>
+              </tr>
+            </thead>
+            <tbody id="reportTableBody">
+              <!-- Les données s'affichent ici -->
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
