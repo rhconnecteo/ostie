@@ -117,8 +117,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let chartReportLieu = null;
   let chartReportChoix = null;
   let chartReportShift = null;
-  let chartReportRattachement = null;
-  let chartReportFonction = null;
+  let chartReportTendance = null;
   
   // Waiting List Elements
   const waitingSection = document.getElementById("waitingSection");
@@ -621,6 +620,7 @@ document.addEventListener("DOMContentLoaded", function () {
       updateStatistics();
       updateCharts();
       updatePendingList();
+      updateDashboardInfo(); // Mettre à jour l'indicateur de période
       displayReport(allConsultations); // Afficher le rapport initial
 
     } catch (e) {
@@ -628,23 +628,35 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  function updateStatistics() {
-    // Obtenir la date d'aujourd'hui
+  // ================= UTILITY FUNCTIONS FOR FILTERING =================
+  /**
+   * Compte les consultations par type de résultat
+   * @param {Array} consultations - Liste des consultations
+   * @param {String} resultType - Type de résultat à compter ("Repos médical", "Assistante maternelle", etc.)
+   * @returns {Number} Nombre de consultations du type spécifié
+   */
+  function countByResult(consultations, resultType) {
+    return consultations.filter(c => c.resultat === resultType).length;
+  }
+
+  /**
+   * Obtient les consultations d'aujourd'hui
+   * @returns {Array} Consultations du jour
+   */
+  function getTodayConsultations() {
     const todayISO = getTodayMadagascar();
-    console.log("Date d'aujourd'hui (ISO):", todayISO);
-    console.log("Total consultations en base:", allConsultations.length);
-    
-    // Filtrer SEULEMENT les consultations d'aujourd'hui (jour J) avec date corrigée
-    const todayConsultations = allConsultations.filter(c => {
+    return allConsultations.filter(c => {
       const correctedDate = extractAndCorrectDate(c.date);
       return correctedDate === todayISO;
     });
-    
-    console.log("Consultations d'aujourd'hui:", todayConsultations.length);
-    
-    const total = todayConsultations.length;
-    const enAttente = todayConsultations.filter(c => !c.heureRetour).length;
-    const repos = todayConsultations.filter(c => c.resultat === "Repos médical").length;
+  }
+
+  function updateStatistics() {
+    // Afficher les statistiques de TOUTES les consultations (tous les jours)
+    const total = allConsultations.length;
+    const enAttente = allConsultations.filter(c => !c.heureRetour).length;
+    // Compter à la fois "Repos médical" et "Assistante maternelle"
+    const repos = countByResult(allConsultations, "Repos médical") + countByResult(allConsultations, "Assistante maternelle");
 
     statTotal.textContent = total;
     statEnAttente.textContent = enAttente;
@@ -652,36 +664,58 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function updateCharts() {
-    const consultation = allConsultations.filter(c => c.resultat === "Consultation médical").length;
-    const repos = allConsultations.filter(c => c.resultat === "Repos médical").length;
+    const consultation = countByResult(allConsultations, "Consultation médical");
+    const repos = countByResult(allConsultations, "Repos médical");
+    const assistante = countByResult(allConsultations, "Assistante maternelle");
+    const total = consultation + repos + assistante;
 
-    // Chart Camembert
+    // Chart Camembert - Répartition de tous les types de résultats
     const ctxCamembert = document.getElementById("chartCamembert").getContext("2d");
     if (chartCamembert) chartCamembert.destroy();
     
     chartCamembert = new Chart(ctxCamembert, {
       type: "doughnut",
       data: {
-        labels: ["Consultation Médical", "Repos Médical"],
+        labels: [
+          `Consultation Médical (${consultation})`,
+          `Repos Médical (${repos})`,
+          `Assistante Maternelle (${assistante})`
+        ],
         datasets: [{
-          data: [consultation, repos],
-          backgroundColor: ["#667eea", "#e74c3c"],
+          data: [consultation, repos, assistante],
+          backgroundColor: ["#667eea", "#e74c3c", "#f39c12"],
           borderColor: "#fff",
           borderWidth: 2
         }]
       },
       options: {
         responsive: true,
+        maintainAspectRatio: true,
         plugins: {
-          legend: { position: "bottom" }
+          legend: { 
+            position: "bottom",
+            labels: {
+              font: { size: 12 },
+              padding: 15
+            }
+          },
+          tooltip: {
+            enabled: true,
+            callbacks: {
+              label: function(context) {
+                const value = context.parsed;
+                const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                return `${value} (${percent}%)`;
+              }
+            }
+          }
         }
       }
     });
 
-    // Chart Jours
+    // Chart Jours - Consultations totales par jour
     const consultationParJour = {};
     allConsultations.forEach(c => {
-      // Extraire et corriger la date en format ISO (YYYY-MM-DD) depuis c.date
       const correctedDate = extractAndCorrectDate(c.date);
       const dateKey = correctedDate !== "-" ? correctedDate : "";
       consultationParJour[dateKey] = (consultationParJour[dateKey] || 0) + 1;
@@ -689,13 +723,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const dates = Object.keys(consultationParJour).sort().slice(-7);
     const counts = dates.map(d => consultationParJour[d]);
-    // Formater les dates en DD-MM-YYYY
+    
+    // Formater les dates en DD-MM-YYYY pour plus de lisibilité
     const formattedDates = dates.map(d => {
       const parts = d.split("-");
-      if (parts.length === 3) {
-        return `${parts[2]}-${parts[1]}-${parts[0]}`; // DD-MM-YYYY
-      }
-      return d;
+      return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : d;
     });
 
     const ctxJours = document.getElementById("chartJours").getContext("2d");
@@ -716,14 +748,22 @@ document.addEventListener("DOMContentLoaded", function () {
       options: {
         responsive: true,
         scales: {
-          y: { beginAtZero: true }
+          y: { beginAtZero: true, ticks: { stepSize: 1 } }
         }
       }
     });
   }
 
+  /**
+   * Obtient les consultations en attente de retour
+   * @returns {Array} Consultations sans heure de retour enregistrée
+   */
+  function getPendingConsultations() {
+    return allConsultations.filter(c => !c.heureRetour);
+  }
+
   function updatePendingList() {
-    const pending = allConsultations.filter(c => !c.heureRetour);
+    const pending = getPendingConsultations();
 
     if (pending.length === 0) {
       pendingList.innerHTML = '<div class="empty-pending">✓ Tous les collaborateurs sont de retour !</div>';
@@ -749,10 +789,11 @@ document.addEventListener("DOMContentLoaded", function () {
           <select class="select-resultat" data-matricule="${c.matricule}" disabled>
             <option value="">-- Résultat --</option>
             <option value="Consultation médical">Consultation médical</option>
+            <option value="Assistante maternelle">Assistante maternelle</option>
             <option value="Repos médical">Repos médical</option>
           </select>
           
-          <input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" placeholder="Jours RM" disabled style="display:none;">
+          <input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" placeholder="Nombre de jours" disabled style="display:none;">
           
           <button class="btn-confirm-retour" data-matricule="${c.matricule}" disabled>OK</button>
         </div>
@@ -792,7 +833,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const matricule = this.dataset.matricule;
         const inputJours = this.parentElement.querySelector(".input-nbjours");
         
-        if (this.value === "Repos médical") {
+        if (this.value === "Repos médical" || this.value === "Assistante maternelle") {
           inputJours.style.display = "inline-block";
           inputJours.disabled = false;
           inputJours.focus();
@@ -833,8 +874,8 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
-        if (selectResultat.value === "Repos médical" && (!inputJours.value || parseFloat(inputJours.value) <= 0)) {
-          showMessage("❌ Le nombre de jours RM est obligatoire", "error");
+        if ((selectResultat.value === "Repos médical" || selectResultat.value === "Assistante maternelle") && (!inputJours.value || parseFloat(inputJours.value) <= 0)) {
+          showMessage("❌ Le nombre de jours est obligatoire", "error");
           return;
         }
 
@@ -875,11 +916,35 @@ document.addEventListener("DOMContentLoaded", function () {
 
     let valid = checkbox.checked && timeRetour.value && selectResultat.value;
     
-    if (valid && selectResultat.value === "Repos médical") {
+    if (valid && (selectResultat.value === "Repos médical" || selectResultat.value === "Assistante maternelle")) {
       valid = inputJours.value && parseFloat(inputJours.value) > 0;
     }
 
     item.disabled = !valid;
+  }
+
+  // ================= UPDATE DASHBOARD INFO INDICATORS =================
+  function updateDashboardInfo() {
+    const dashboardSubtitle = document.getElementById("dashboardSubtitle");
+    if (!dashboardSubtitle) return;
+
+    // Compter le nombre de jours uniques dans les données
+    const uniqueDates = new Set();
+    allConsultations.forEach(c => {
+      const correctedDate = extractAndCorrectDate(c.date);
+      if (correctedDate !== "-") uniqueDates.add(correctedDate);
+    });
+
+    const dateCount = uniqueDates.size;
+    if (dateCount === 0) {
+      dashboardSubtitle.innerHTML = 'Vue d\'ensemble de <strong>toutes les consultations</strong>';
+    } else if (dateCount === 1) {
+      const date = Array.from(uniqueDates)[0];
+      dashboardSubtitle.innerHTML = `Vue d'ensemble de <strong>${dateCount} jour</strong> (${date})`;
+    } else {
+      const dates = Array.from(uniqueDates).sort();
+      dashboardSubtitle.innerHTML = `Vue d'ensemble de <strong>${dateCount} jours</strong> (${dates[0]} à ${dates[dates.length - 1]})`;
+    }
   }
 
   // ================= RAPPORT CONSULTATIONS PASSÉES =================
@@ -915,8 +980,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function updateReportStatistics(consultations) {
     const total = consultations.length;
-    const rm = consultations.filter(c => c.resultat === "Repos médical").length;
-    const consult = consultations.filter(c => c.resultat === "Consultation médical").length;
+    // Compter à la fois "Repos médical" et "Assistante maternelle" pour les congés
+    const rm = countByResult(consultations, "Repos médical") + countByResult(consultations, "Assistante maternelle");
+    const consult = countByResult(consultations, "Consultation médical");
     const dayoff = consultations.filter(c => c.choix === "Day off").length;
 
     reportStatTotal.textContent = total;
@@ -925,26 +991,84 @@ document.addEventListener("DOMContentLoaded", function () {
     reportStatDayoff.textContent = dayoff;
   }
 
+  /**
+   * Génère un tableau matriciel à partir des statistiques
+   * @param {Object} statsObj - Objet avec statistiques (consultation, rm, assistante)
+   * @returns {String} HTML du tableau
+   */
+  function generateMatrixTable(statsObj) {
+    const keys = Object.keys(statsObj).filter(k => k && k !== "undefined").sort();
+    
+    if (keys.length === 0) {
+      return '<p style="text-align: center; color: #999;">Aucune donnée disponible</p>';
+    }
+
+    let html = '<table class="matrix-table"><thead><tr>';
+    html += '<th>Catégorie</th>';
+    html += '<th class="col-consultation">Consultation</th>';
+    html += '<th class="col-repos">Repos Médical</th>';
+    html += '<th class="col-assistante">Assistante Maternelle</th>';
+    html += '<th class="col-total">Total</th>';
+    html += '</tr></thead><tbody>';
+
+    keys.forEach(key => {
+      const stats = statsObj[key];
+      const total = stats.consultation + stats.rm + stats.assistante;
+      html += `<tr>`;
+      html += `<td>${key || '(Non spécifié)'}</td>`;
+      html += `<td class="col-consultation">${stats.consultation}</td>`;
+      html += `<td class="col-repos">${stats.rm}</td>`;
+      html += `<td class="col-assistante">${stats.assistante}</td>`;
+      html += `<td class="col-total">${total}</td>`;
+      html += `</tr>`;
+    });
+
+    // Ligne de total
+    const totalConsultation = keys.reduce((sum, k) => sum + statsObj[k].consultation, 0);
+    const totalRM = keys.reduce((sum, k) => sum + statsObj[k].rm, 0);
+    const totalAssistante = keys.reduce((sum, k) => sum + statsObj[k].assistante, 0);
+    const grandTotal = totalConsultation + totalRM + totalAssistante;
+
+    html += `<tr style="font-weight: bold; background-color: #f0f0f0;">`;
+    html += `<td>TOTAL</td>`;
+    html += `<td class="col-consultation">${totalConsultation}</td>`;
+    html += `<td class="col-repos">${totalRM}</td>`;
+    html += `<td class="col-assistante">${totalAssistante}</td>`;
+    html += `<td class="col-total">${grandTotal}</td>`;
+    html += `</tr>`;
+
+    html += '</tbody></table>';
+    return html;
+  }
+
   function updateReportCharts(consultations) {
     if (consultations.length === 0) return;
 
-    // Chart Résultats (Consultation vs Repos)
-    const consultation = consultations.filter(c => c.resultat === "Consultation médical").length;
-    const repos = consultations.filter(c => c.resultat === "Repos médical").length;
-    const total = consultations.length;
-    const autres = total - consultation - repos;
+    // Chart Résultats - Consultation vs Repos Médical vs Assistante Maternelle
+    const consultation = countByResult(consultations, "Consultation médical");
+    const repos = countByResult(consultations, "Repos médical");
+    const assistante = countByResult(consultations, "Assistante maternelle");
+    const autres = consultations.length - consultation - repos - assistante;
 
     const ctxResultats = document.getElementById("chartReportResultats")?.getContext("2d");
     if (ctxResultats) {
       if (chartReportResultats) chartReportResultats.destroy();
       
+      // Calculer le total pour les pourcentages
+      const totalResultats = consultation + repos + assistante + autres;
+      
       chartReportResultats = new Chart(ctxResultats, {
         type: "doughnut",
         data: {
-          labels: ["Consultation Médical", "Repos Médical", "Autres"],
+          labels: [
+            `Consultation Médical`,
+            `Repos Médical`,
+            `Assistante Maternelle`,
+            autres > 0 ? `Autres` : null
+          ].filter(Boolean),
           datasets: [{
-            data: [consultation, repos, autres],
-            backgroundColor: ["#667eea", "#e74c3c", "#f39c12"],
+            data: autres > 0 ? [consultation, repos, assistante, autres] : [consultation, repos, assistante],
+            backgroundColor: autres > 0 ? ["#667eea", "#e74c3c", "#f39c12", "#95a5a6"] : ["#667eea", "#e74c3c", "#f39c12"],
             borderColor: "#fff",
             borderWidth: 2
           }]
@@ -952,31 +1076,89 @@ document.addEventListener("DOMContentLoaded", function () {
         options: {
           responsive: true,
           plugins: {
-            legend: { position: "bottom" },
+            legend: {
+              position: "bottom",
+              labels: {
+                font: { size: 11 },
+                padding: 12
+              }
+            },
             tooltip: {
               callbacks: {
                 label: function(context) {
-                  return context.label + ": " + context.parsed.y;
+                  const value = context.parsed;
+                  const percent = totalResultats > 0 ? ((value / totalResultats) * 100).toFixed(1) : 0;
+                  return `${value} (${percent}%)`;
                 }
+              }
+            },
+            datalabels: {
+              color: "#fff",
+              font: { weight: "bold", size: 12 },
+              formatter: function(value) {
+                return value;
               }
             }
           }
-        }
+        },
+        plugins: [{
+          id: "textCenter",
+          beforeDatasetsDraw(chart) {
+            const {datasets} = chart.data;
+            const total = datasets[0].data.reduce((a, b) => a + b, 0);
+            
+            datasets.forEach((dataset, i) => {
+              if (!dataset.hidden) {
+                for (let d = 0; d < dataset.data.length; d++) {
+                  const count = dataset.data[d];
+                  const pct = ((count / total) * 100).toFixed(0);
+                  
+                  const {ctx, chartArea: {left, top, width, height}} = chart;
+                  const x = left + width / 2;
+                  const y = top + height / 2;
+                  
+                  ctx.save();
+                  ctx.font = "bold 14px sans-serif";
+                  ctx.fillStyle = "#fff";
+                  ctx.textAlign = "center";
+                  ctx.textBaseline = "middle";
+                  
+                  const meta = chart.getDatasetMeta(0);
+                  const angle = (meta.data[d].startAngle + meta.data[d].endAngle) / 2;
+                  const radius = (meta.data[d].outerRadius + meta.data[d].innerRadius) / 2;
+                  
+                  const textX = x + radius * Math.cos(angle - Math.PI / 2);
+                  const textY = y + radius * Math.sin(angle - Math.PI / 2);
+                  
+                  ctx.fillText(`${count}`, textX, textY);
+                  ctx.restore();
+                }
+              }
+            });
+          }
+        }]
       });
     }
 
-    // Chart Lieu
+    // Chart Lieu - avec couleurs différentes
     const lieuStats = {};
     consultations.forEach(c => {
       lieuStats[c.lieuConsultation] = (lieuStats[c.lieuConsultation] || 0) + 1;
     });
     const lieus = Object.keys(lieuStats);
     const lieuCounts = Object.values(lieuStats);
+    
+    // Générer des couleurs distinctes pour chaque lieu
+    const lieuColors = [
+      "#667eea", "#e74c3c", "#f39c12", "#16a085", "#8e44ad", 
+      "#c0392b", "#27ae60", "#2980b9", "#d35400", "#34495e",
+      "#1abc9c", "#e67e22", "#f1c40f", "#9b59b6", "#00bcd4"
+    ];
 
     const ctxLieu = document.getElementById("chartReportLieu")?.getContext("2d");
     if (ctxLieu) {
       if (chartReportLieu) chartReportLieu.destroy();
-      
+
       chartReportLieu = new Chart(ctxLieu, {
         type: "bar",
         data: {
@@ -984,8 +1166,8 @@ document.addEventListener("DOMContentLoaded", function () {
           datasets: [{
             label: "Consultations",
             data: lieuCounts,
-            backgroundColor: "#667eea",
-            borderColor: "#764ba2",
+            backgroundColor: lieus.map((_, i) => lieuColors[i % lieuColors.length]),
+            borderColor: lieus.map((_, i) => lieuColors[i % lieuColors.length]),
             borderWidth: 1
           }]
         },
@@ -1028,13 +1210,20 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
 
-    // Chart Shift - EN HISTOGRAMME
+    // Chart Shift - Jour (vert) vs Nuit (jaune)
     const shiftStats = {};
     consultations.forEach(c => {
       shiftStats[c.shift] = (shiftStats[c.shift] || 0) + 1;
     });
     const shifts = Object.keys(shiftStats);
     const shiftCounts = Object.values(shiftStats);
+    
+    // Colorer Jour en vert et Nuit en jaune
+    const shiftColors = shifts.map(shift => {
+      if (shift === "Jour") return "#27ae60"; // Vert
+      if (shift === "Nuit") return "#f1c40f"; // Jaune
+      return "#95a5a6"; // Gris par défaut
+    });
 
     const ctxShift = document.getElementById("chartReportShift")?.getContext("2d");
     if (ctxShift) {
@@ -1047,8 +1236,8 @@ document.addEventListener("DOMContentLoaded", function () {
           datasets: [{
             label: "Consultations",
             data: shiftCounts,
-            backgroundColor: "#667eea",
-            borderColor: "#764ba2",
+            backgroundColor: shiftColors,
+            borderColor: shiftColors,
             borderWidth: 1
           }]
         },
@@ -1061,40 +1250,62 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
 
-    // Chart Rattachement - Consultation vs RM
-    const rattachementStats = {};
+    // Courbe de Tendance - Consultation vs RM/Assistante par date
+    const dateStats = {};
     consultations.forEach(c => {
-      if (!rattachementStats[c.rattachement]) {
-        rattachementStats[c.rattachement] = { consultation: 0, rm: 0 };
-      }
-      if (c.resultat === "Consultation médical") {
-        rattachementStats[c.rattachement].consultation++;
-      } else if (c.resultat === "Repos médical") {
-        rattachementStats[c.rattachement].rm++;
+      const correctedDate = extractAndCorrectDate(c.date);
+      if (correctedDate && correctedDate !== "-") {
+        if (!dateStats[correctedDate]) {
+          dateStats[correctedDate] = { consultation: 0, congé: 0 }; // congé = RM + Assistante maternelle
+        }
+        if (c.resultat === "Consultation médical") {
+          dateStats[correctedDate].consultation++;
+        } else if (c.resultat === "Repos médical" || c.resultat === "Assistante maternelle") {
+          dateStats[correctedDate].congé++;
+        }
       }
     });
-    const rattachements = Object.keys(rattachementStats);
-    const consultationByRattachement = rattachements.map(r => rattachementStats[r].consultation);
-    const rmByRattachement = rattachements.map(r => rattachementStats[r].rm);
 
-    const ctxRattachement = document.getElementById("chartReportRattachement")?.getContext("2d");
-    if (ctxRattachement) {
-      if (chartReportRattachement) chartReportRattachement.destroy();
+    const datesSorted = Object.keys(dateStats).sort();
+    const consultationTrend = datesSorted.map(d => dateStats[d].consultation);
+    const congéTrend = datesSorted.map(d => dateStats[d].congé);
+
+    const ctxTendance = document.getElementById("chartReportTendance")?.getContext("2d");
+    if (ctxTendance && datesSorted.length > 0) {
+      if (chartReportTendance) chartReportTendance.destroy();
       
-      chartReportRattachement = new Chart(ctxRattachement, {
-        type: "bar",
+      chartReportTendance = new Chart(ctxTendance, {
+        type: "line",
         data: {
-          labels: rattachements,
+          labels: datesSorted,
           datasets: [
             {
-              label: "Consultation Médical",
-              data: consultationByRattachement,
-              backgroundColor: "#667eea"
+              label: "Consultations",
+              data: consultationTrend,
+              borderColor: "#667eea",
+              backgroundColor: "rgba(102, 126, 234, 0.1)",
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4,
+              pointBackgroundColor: "#667eea",
+              pointBorderColor: "#fff",
+              pointBorderWidth: 2,
+              pointRadius: 5,
+              pointHoverRadius: 7
             },
             {
-              label: "Repos Médical",
-              data: rmByRattachement,
-              backgroundColor: "#e74c3c"
+              label: "Repos Médical + Assistante Maternelle",
+              data: congéTrend,
+              borderColor: "#e74c3c",
+              backgroundColor: "rgba(231, 76, 60, 0.1)",
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4,
+              pointBackgroundColor: "#e74c3c",
+              pointBorderColor: "#fff",
+              pointBorderWidth: 2,
+              pointRadius: 5,
+              pointHoverRadius: 7
             }
           ]
         },
@@ -1102,55 +1313,56 @@ document.addEventListener("DOMContentLoaded", function () {
           responsive: true,
           scales: {
             y: { beginAtZero: true }
+          },
+          plugins: {
+            legend: {
+              position: "top"
+            }
           }
         }
       });
     }
 
-    // Chart Fonction - Consultation vs RM
+    // Matrice Rattachement - Consultation vs RM vs Assistante Maternelle
+    const rattachementStats = {};
+    consultations.forEach(c => {
+      if (!rattachementStats[c.rattachement]) {
+        rattachementStats[c.rattachement] = { consultation: 0, rm: 0, assistante: 0 };
+      }
+      if (c.resultat === "Consultation médical") {
+        rattachementStats[c.rattachement].consultation++;
+      } else if (c.resultat === "Repos médical") {
+        rattachementStats[c.rattachement].rm++;
+      } else if (c.resultat === "Assistante maternelle") {
+        rattachementStats[c.rattachement].assistante++;
+      }
+    });
+
+    // Générer le tableau matriciel pour Rattachement
+    const matrixRattachement = document.getElementById("matrixRattachement");
+    if (matrixRattachement) {
+      matrixRattachement.innerHTML = generateMatrixTable(rattachementStats);
+    }
+
+    // Matrice Fonction - Consultation vs RM vs Assistante Maternelle
     const fonctionStats = {};
     consultations.forEach(c => {
       if (!fonctionStats[c.fonction]) {
-        fonctionStats[c.fonction] = { consultation: 0, rm: 0 };
+        fonctionStats[c.fonction] = { consultation: 0, rm: 0, assistante: 0 };
       }
       if (c.resultat === "Consultation médical") {
         fonctionStats[c.fonction].consultation++;
       } else if (c.resultat === "Repos médical") {
         fonctionStats[c.fonction].rm++;
+      } else if (c.resultat === "Assistante maternelle") {
+        fonctionStats[c.fonction].assistante++;
       }
     });
-    const fonctions = Object.keys(fonctionStats);
-    const consultationByFonction = fonctions.map(f => fonctionStats[f].consultation);
-    const rmByFonction = fonctions.map(f => fonctionStats[f].rm);
 
-    const ctxFonction = document.getElementById("chartReportFonction")?.getContext("2d");
-    if (ctxFonction) {
-      if (chartReportFonction) chartReportFonction.destroy();
-      
-      chartReportFonction = new Chart(ctxFonction, {
-        type: "bar",
-        data: {
-          labels: fonctions,
-          datasets: [
-            {
-              label: "Consultation Médical",
-              data: consultationByFonction,
-              backgroundColor: "#667eea"
-            },
-            {
-              label: "Repos Médical",
-              data: rmByFonction,
-              backgroundColor: "#e74c3c"
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: { beginAtZero: true }
-          }
-        }
-      });
+    // Générer le tableau matriciel pour Fonction
+    const matrixFonction = document.getElementById("matrixFonction");
+    if (matrixFonction) {
+      matrixFonction.innerHTML = generateMatrixTable(fonctionStats);
     }
   }
 
