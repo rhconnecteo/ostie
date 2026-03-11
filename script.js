@@ -100,6 +100,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const pendingList = document.getElementById("pendingList");
   const filterFromDate = document.getElementById("filterFromDate");
   const filterToDate = document.getElementById("filterToDate");
+  const filterRattachement = document.getElementById("filterRattachement");
+  const filterFonction = document.getElementById("filterFonction");
   const btnFilterReport = document.getElementById("btnFilterReport");
   const btnResetReport = document.getElementById("btnResetReport");
   const btnPreviousDay = document.getElementById("btnPreviousDay");
@@ -621,6 +623,7 @@ document.addEventListener("DOMContentLoaded", function () {
       updateCharts();
       updatePendingList();
       updateDashboardInfo(); // Mettre à jour l'indicateur de période
+      populateFilterSelects(); // Remplir les sélects des filtres
       displayReport(allConsultations); // Afficher le rapport initial
 
     } catch (e) {
@@ -923,7 +926,6 @@ document.addEventListener("DOMContentLoaded", function () {
     item.disabled = !valid;
   }
 
-  // ================= UPDATE DASHBOARD INFO INDICATORS =================
   function updateDashboardInfo() {
     const dashboardSubtitle = document.getElementById("dashboardSubtitle");
     if (!dashboardSubtitle) return;
@@ -946,6 +948,47 @@ document.addEventListener("DOMContentLoaded", function () {
       dashboardSubtitle.innerHTML = `Vue d'ensemble de <strong>${dateCount} jours</strong> (${dates[0]} à ${dates[dates.length - 1]})`;
     }
   }
+
+  /**
+   * Remplir les sélects des filtres (Rattachement et Fonction)
+   */
+  function populateFilterSelects() {
+    // Extraire les valeurs uniques de rattachement
+    const rattachements = new Set();
+    allConsultations.forEach(c => {
+      if (c.rattachement && c.rattachement !== "-") {
+        rattachements.add(c.rattachement);
+      }
+    });
+
+    // Remplir le select Rattachement
+    const sortedRattachements = Array.from(rattachements).sort();
+    sortedRattachements.forEach(r => {
+      const option = document.createElement("option");
+      option.value = r;
+      option.textContent = r;
+      filterRattachement.appendChild(option);
+    });
+
+    // Extraire les valeurs uniques de fonction
+    const fonctions = new Set();
+    allConsultations.forEach(c => {
+      if (c.fonction && c.fonction !== "-") {
+        fonctions.add(c.fonction);
+      }
+    });
+
+    // Remplir le select Fonction
+    const sortedFonctions = Array.from(fonctions).sort();
+    sortedFonctions.forEach(f => {
+      const option = document.createElement("option");
+      option.value = f;
+      option.textContent = f;
+      filterFonction.appendChild(option);
+    });
+  }
+
+  // ================= UPDATE DASHBOARD INFO INDICATORS =================
 
   // ================= RAPPORT CONSULTATIONS PASSÉES =================
   function displayReport(consultations) {
@@ -1369,6 +1412,8 @@ document.addEventListener("DOMContentLoaded", function () {
   function getFilteredConsultations() {
     const fromDate = filterFromDate.value ? new Date(filterFromDate.value) : null;
     const toDate = filterToDate.value ? new Date(filterToDate.value) : null;
+    const selectedRattachement = filterRattachement.value;
+    const selectedFonction = filterFonction.value;
 
     const filtered = allConsultations.filter(c => {
       const correctedDate = extractAndCorrectDate(c.date);
@@ -1382,6 +1427,12 @@ document.addEventListener("DOMContentLoaded", function () {
         toDateEnd.setDate(toDateEnd.getDate() + 1);
         if (consultDate >= toDateEnd) return false;
       }
+
+      // Filtrer par rattachement
+      if (selectedRattachement && c.rattachement !== selectedRattachement) return false;
+
+      // Filtrer par fonction
+      if (selectedFonction && c.fonction !== selectedFonction) return false;
 
       return true;
     });
@@ -1405,6 +1456,8 @@ document.addEventListener("DOMContentLoaded", function () {
     btnResetReport.addEventListener("click", function () {
       filterFromDate.value = "";
       filterToDate.value = "";
+      filterRattachement.value = "";
+      filterFonction.value = "";
       displayReport(allConsultations);
     });
   }
@@ -1449,9 +1502,24 @@ document.addEventListener("DOMContentLoaded", function () {
       // Naviguer vers la section rapport
       navBtns.forEach(b => b.classList.remove("active"));
       document.querySelector('[data-section="rapport"]').classList.add("active");
-      
+
       sections.forEach(s => s.classList.remove("active"));
       document.getElementById("rapport").classList.add("active");
+    });
+  }
+
+  // Écouteurs pour les sélects des filtres
+  if (filterRattachement) {
+    filterRattachement.addEventListener("change", function () {
+      const filtered = getFilteredConsultations();
+      displayReport(filtered);
+    });
+  }
+
+  if (filterFonction) {
+    filterFonction.addEventListener("change", function () {
+      const filtered = getFilteredConsultations();
+      displayReport(filtered);
     });
   }
 
