@@ -1,6 +1,8 @@
 document.addEventListener("DOMContentLoaded", function () {
 
-  const API_URL = "https://script.google.com/macros/s/AKfycbxUum4GRBehyXS-iWGunLTWP7GwAdewFJKTn79TbMLSRGyns26eMGpE7ZNJp1M6vK21FA/exec";
+  const API_URL = "https://script.google.com/macros/s/AKfycbyAC_2REMBxsH6YWYYDcNUAN7lPu4tF4wauOR4gKosPPiauO6DXTP04Mcm99VQTywNenw/exec";
+  
+  
   // ================= STATE =================
   let isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
   let allCollaborateurs = [];
@@ -655,21 +657,130 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function updateStatistics() {
-    // Afficher les statistiques de TOUTES les consultations (tous les jours)
-    const total = allConsultations.length;
-    const enAttente = allConsultations.filter(c => !c.heureRetour).length;
-    // Compter à la fois "Repos médical" et "Assistante maternelle"
-    const repos = countByResult(allConsultations, "Repos médical") + countByResult(allConsultations, "Assistante maternelle");
+    // ========== AFFICHER LES STATISTIQUES D'AUJOURD'HUI SEULEMENT ==========
+    const todayConsultations = getTodayConsultations();
+    const total = todayConsultations.length;
+    
+    // ========== EN ATTENTE: Consultations d'AUJOURD'HUI sans retour ==========
+    const enAttente = todayConsultations.filter(c => !c.heureRetour || c.heureRetour === "").length;
+    
+    // ========== REPOS MÉDICAL: Compter "Repos médical" d'AUJOURD'HUI ==========
+    const repos = todayConsultations.filter(c => c.resultat === "Repos médical").length;
+    
+    // ========== JOURS RM: Somme des jours de repos médical d'AUJOURD'HUI ==========
+    const joursRM = todayConsultations.reduce((sum, c) => {
+      const jours = parseInt(c.nbJourRM) || 0;
+      return sum + jours;
+    }, 0);
 
     statTotal.textContent = total;
     statEnAttente.textContent = enAttente;
     statRepos.textContent = repos;
+    
+    // Si le stat pour jours RM existe, le remplir
+    const statJoursRM = document.getElementById("statJoursRM");
+    if (statJoursRM) {
+      statJoursRM.textContent = joursRM;
+    }
+  }
+
+  // ========== TABLEAU DÉTAILLÉ DES COLLABORATEURS ==========
+  function updateCollaboratorsTable(consultations) {
+    // Grouper par collaborateur
+    const collaboratorMap = {};
+    const uniqueDates = new Set();
+    
+    consultations.forEach(c => {
+      const key = c.matricule + "|" + c.nom;
+      if (!collaboratorMap[key]) {
+        collaboratorMap[key] = {
+          matricule: c.matricule,
+          nom: c.nom,
+          fonction: c.fonction,
+          rattachement: c.rattachement,
+          count: 0,
+          joursRM: 0,
+          shiftNuit: 0
+        };
+      }
+      collaboratorMap[key].count++;
+      
+      // Compter les jours RM
+      if (c.resultat === "Repos médical") {
+        const jours = parseInt(c.nbJourRM) || 0;
+        collaboratorMap[key].joursRM += jours;
+      }
+      
+      // Compter les consultations en shift nuit
+      if (c.shift === "Nuit") {
+        collaboratorMap[key].shiftNuit++;
+      }
+      
+      // Compter les jours uniques pour calculer le seuil
+      const correctedDate = extractAndCorrectDate(c.date);
+      if (correctedDate !== "-") {
+        uniqueDates.add(correctedDate);
+      }
+    });
+    
+    // ========== CALCULER LE SEUIL DE COULEUR DYNAMIQUEMENT ==========
+    const numberOfDays = uniqueDates.size;
+    let threshold = 3;
+    
+    if (numberOfDays === 1) {
+      threshold = 999;
+    } else if (numberOfDays <= 3) {
+      threshold = 6;
+    } else if (numberOfDays <= 7) {
+      threshold = 3 * numberOfDays / 7;
+    } else {
+      threshold = 2 * numberOfDays / 7;
+    }
+    
+    // Convertir en tableau et trier
+    const collaborators = Object.values(collaboratorMap).sort((a, b) => b.count - a.count);
+    
+    // Remplir le tableau HTML
+    const tbody = document.getElementById("collaboratorsTableBody");
+    if (!tbody) return;
+    
+    tbody.innerHTML = "";
+    
+    collaborators.forEach(collab => {
+      const row = document.createElement("tr");
+      // CORRECTION: >= 3 au lieu de > 3
+      const isAlert = collab.count >= 3;
+      
+      if (isAlert) {
+        row.style.backgroundColor = "#ffebee";
+        row.style.color = "#c62828";
+        row.style.fontWeight = "bold";
+      }
+      
+      row.innerHTML = `
+        <td>${collab.nom}</td>
+        <td style="text-align: center;">
+          <span style="display: inline-block; min-width: 30px; padding: 4px 8px; border-radius: 12px; ${isAlert ? 'background-color: #ef5350; color: white;' : 'background-color: #e3f2fd; color: #1976d2;'} font-weight: bold;">
+            ${collab.count}
+          </span>
+        </td>
+        <td style="text-align: center;">${collab.joursRM}</td>
+        <td style="text-align: center;">${collab.shiftNuit}</td>
+        <td>${collab.fonction || "-"}</td>
+        <td>${collab.rattachement || "-"}</td>
+      `;
+      
+      tbody.appendChild(row);
+    });
   }
 
   function updateCharts() {
-    const consultation = countByResult(allConsultations, "Consultation médical");
-    const repos = countByResult(allConsultations, "Repos médical");
-    const assistante = countByResult(allConsultations, "Assistante maternelle");
+    // ========== UTILISER LES CONSULTATIONS D'AUJOURD'HUI SEULEMENT ==========
+    const todayConsultations = getTodayConsultations();
+    
+    const consultation = todayConsultations.filter(c => c.resultat === "Consultation médical").length;
+    const repos = todayConsultations.filter(c => c.resultat === "Repos médical").length;
+    const assistante = todayConsultations.filter(c => c.resultat === "Assistante maternelle").length;
     const total = consultation + repos + assistante;
 
     // Chart Camembert - Répartition de tous les types de résultats
@@ -767,43 +878,73 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function updatePendingList() {
     const pending = getPendingConsultations();
+    let allPendingItems = pending; // Garder la liste complète pour la recherche
 
     if (pending.length === 0) {
       pendingList.innerHTML = '<div class="empty-pending">✓ Tous les collaborateurs sont de retour !</div>';
       return;
     }
 
-    pendingList.innerHTML = pending.map(c => `
-      <div class="pending-item" data-id="${c.id || c.matricule}">
-        <div class="pending-info">
-          <div class="pending-name">👤 ${c.nom} ${c.prenom || ""}</div>
-          <div class="pending-details">
-            <span>📍 Matricule: ${c.matricule}</span> |
-            <span>🕐 Sortie: ${extractTimeFromISO(c.heureSortie)}</span> |
-            <span>🏥 ${c.typeConsultation}</span> |
-            <span>📍 ${c.lieuConsultation}</span> |
-            <span>🌙 ${c.shift}</span>
+    // Fonction pour afficher/filtrer la liste
+    function displayPendingList(itemsToDisplay) {
+      pendingList.innerHTML = itemsToDisplay.map(c => `
+        <div class="pending-item" data-id="${c.id || c.matricule}" data-search="${(c.nom + ' ' + c.matricule).toLowerCase()}">
+          <div class="pending-info">
+            <div class="pending-name">👤 ${c.nom}</div>
+            <div class="pending-details">
+              <span>📍 Matricule: <strong>${c.matricule}</strong></span> |
+              <span>🕐 Sortie: ${extractTimeFromISO(c.heureSortie)}</span> |
+              <span>🏥 ${c.typeConsultation}</span> |
+              <span>📍 ${c.lieuConsultation}</span> |
+              <span>🌙 ${c.shift}</span>
+            </div>
+          </div>
+          <div class="pending-actions">
+            <input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}">
+            <input type="time" class="time-retour" data-matricule="${c.matricule}" placeholder="Heure retour" disabled>
+            
+            <select class="select-resultat" data-matricule="${c.matricule}" disabled>
+              <option value="">-- Résultat --</option>
+              <option value="Consultation médical">Consultation médical</option>
+              <option value="Assistante maternelle">Assistante maternelle</option>
+              <option value="Repos médical">Repos médical</option>
+              <option value="anomalie">anomalie</option>
+            </select>
+            
+            <input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" placeholder="Nombre de jours" disabled style="display:none;">
+            
+            <button class="btn-confirm-retour" data-matricule="${c.matricule}" disabled>OK</button>
           </div>
         </div>
-        <div class="pending-actions">
-          <input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}">
-          <input type="time" class="time-retour" data-matricule="${c.matricule}" placeholder="Heure retour" disabled>
-          
-          <select class="select-resultat" data-matricule="${c.matricule}" disabled>
-            <option value="">-- Résultat --</option>
-            <option value="Consultation médical">Consultation médical</option>
-            <option value="Assistante maternelle">Assistante maternelle</option>
-            <option value="Repos médical">Repos médical</option>
-          </select>
-          
-          <input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" placeholder="Nombre de jours" disabled style="display:none;">
-          
-          <button class="btn-confirm-retour" data-matricule="${c.matricule}" disabled>OK</button>
-        </div>
-      </div>
-    `).join("");
+      `).join("");
 
-    // Ajouter les événements
+      // Ajouter les événements
+      attachPendingEventListeners();
+    }
+
+    // Afficher la liste initiale
+    displayPendingList(pending);
+
+    // ========== AJOUTER LA RECHERCHE ==========
+    const searchPending = document.getElementById("searchPending");
+    if (searchPending) {
+      searchPending.addEventListener("input", function () {
+        const searchTerm = this.value.toLowerCase();
+        
+        if (searchTerm === "") {
+          displayPendingList(allPendingItems);
+        } else {
+          const filtered = allPendingItems.filter(c => {
+            return (c.nom.toLowerCase().includes(searchTerm) || c.matricule.toLowerCase().includes(searchTerm));
+          });
+          displayPendingList(filtered);
+        }
+      });
+    }
+  }
+
+  // ========== ATTACHER LES EVENT LISTENERS À LA LISTE EN ATTENTE ==========
+  function attachPendingEventListeners() {
     document.querySelectorAll(".checkbox-retour").forEach(checkbox => {
       checkbox.addEventListener("change", function () {
         const matricule = this.dataset.matricule;
@@ -835,11 +976,21 @@ document.addEventListener("DOMContentLoaded", function () {
       select.addEventListener("change", function () {
         const matricule = this.dataset.matricule;
         const inputJours = this.parentElement.querySelector(".input-nbjours");
+        const timeRetourInput = this.parentElement.querySelector(".time-retour");
         
         if (this.value === "Repos médical" || this.value === "Assistante maternelle") {
           inputJours.style.display = "inline-block";
           inputJours.disabled = false;
           inputJours.focus();
+        } else if (this.value === "anomalie") {
+          // Anomalie: calculer automatiquement l'heure de retour
+          // Pas de champ jours visible pour anomalie
+          inputJours.value = "";
+          inputJours.style.display = "none";
+          inputJours.disabled = true;
+          
+          // Calculer la durée moyenne et ajouter l'heure de retour
+          calculateAndSetAverageReturnTime(matricule);
         } else {
           inputJours.value = "";
           inputJours.style.display = "none";
@@ -1017,13 +1168,13 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
     
+    updateCollaboratorsTable(consultations);
     updateReportStatistics(consultations);
     updateReportCharts(consultations);
   }
 
   function updateReportStatistics(consultations) {
     const total = consultations.length;
-    // Compter à la fois "Repos médical" et "Assistante maternelle" pour les congés
     const rm = countByResult(consultations, "Repos médical") + countByResult(consultations, "Assistante maternelle");
     const consult = countByResult(consultations, "Consultation médical");
     const dayoff = consultations.filter(c => c.choix === "Day off").length;
@@ -1032,6 +1183,49 @@ document.addEventListener("DOMContentLoaded", function () {
     reportStatRM.textContent = rm;
     reportStatConsult.textContent = consult;
     reportStatDayoff.textContent = dayoff;
+    
+    // ========== STATISTIQUES SUPPLÉMENTAIRES ==========
+    
+    // 1. JOURS DE REPOS MÉDICAL
+    const joursRM = consultations.reduce((sum, c) => {
+      if (c.resultat === "Repos médical") {
+        const jours = parseFloat(c.nbJourRM) || 0;
+        return sum + jours;
+      }
+      return sum;
+    }, 0);
+    
+    // 2. JOURS D'ASSISTANTE MATERNELLE
+    const joursAssistante = consultations.reduce((sum, c) => {
+      if (c.resultat === "Assistante maternelle") {
+        const jours = parseFloat(c.nbJourRM) || 0;
+        return sum + jours;
+      }
+      return sum;
+    }, 0);
+    
+    // 3. COLLABORATEURS EN SHIFT NUIT (count unique)
+    const shiftNuitCollaborators = new Set();
+    consultations.forEach(c => {
+      if (c.shift === "Nuit") {
+        shiftNuitCollaborators.add(c.matricule);
+      }
+    });
+    const shiftNuit = shiftNuitCollaborators.size;
+    
+    // 4. ANOMALIES
+    const anomalies = consultations.filter(c => c.resultat === "anomalie").length;
+    
+    // Mettre à jour les éléments DOM
+    const reportStatJoursRM = document.getElementById("reportStatJoursRM");
+    const reportStatJoursAssistante = document.getElementById("reportStatJoursAssistante");
+    const reportStatShiftNuit = document.getElementById("reportStatShiftNuit");
+    const reportStatAnomalies = document.getElementById("reportStatAnomalies");
+    
+    if (reportStatJoursRM) reportStatJoursRM.textContent = joursRM.toFixed(1);
+    if (reportStatJoursAssistante) reportStatJoursAssistante.textContent = joursAssistante.toFixed(1);
+    if (reportStatShiftNuit) reportStatShiftNuit.textContent = shiftNuit;
+    if (reportStatAnomalies) reportStatAnomalies.textContent = anomalies;
   }
 
   /**
@@ -1224,10 +1418,10 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
 
-    // Chart Choix (Day off vs Jour)
+    // Chart Choix (Day off vs En poste)
+    // CORRECTION: Utiliser "En poste" au lieu de "Jour"
     const dayoff = consultations.filter(c => c.choix === "Day off").length;
-    const jour = consultations.filter(c => c.choix === "Jour").length;
-    const autreChoix = consultations.filter(c => c.choix !== "Day off" && c.choix !== "Jour" && c.choix !== "").length;
+    const enPoste = consultations.filter(c => c.choix === "En poste").length;
 
     const ctxChoix = document.getElementById("chartReportChoix")?.getContext("2d");
     if (ctxChoix) {
@@ -1236,10 +1430,10 @@ document.addEventListener("DOMContentLoaded", function () {
       chartReportChoix = new Chart(ctxChoix, {
         type: "pie",
         data: {
-          labels: ["Day off", "Jour", "Autres"],
+          labels: ["Day off", "En poste"],
           datasets: [{
-            data: [dayoff, jour, autreChoix],
-            backgroundColor: ["#e74c3c", "#3498db", "#95a5a6"],
+            data: [dayoff, enPoste],
+            backgroundColor: ["#e74c3c", "#3498db"],
             borderColor: "#fff",
             borderWidth: 2
           }]
@@ -1521,6 +1715,245 @@ document.addEventListener("DOMContentLoaded", function () {
       const filtered = getFilteredConsultations();
       displayReport(filtered);
     });
+  }
+
+  // ================= CHECK ANOMALIES =================
+  async function checkAnomaliesManually() {
+    try {
+      const btn = document.getElementById("btnCheckAnomalies");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Vérification...";
+      }
+
+      const res = await fetch(`${API_URL}?action=checkAnomalies`);
+      const json = await res.json();
+
+      if (json.success) {
+        showMessage("✅ Vérification des anomalies effectuée ! Les consultations non fermées depuis plus de 24h ont été marquées comme 'anomalie'.");
+        // Recharger les données
+        loadDashboardData();
+      } else {
+        showMessage("❌ Erreur : " + json.error, "error");
+      }
+    } catch (e) {
+      console.error("Erreur lors de la vérification des anomalies :", e);
+      showMessage("❌ Erreur serveur lors de la vérification", "error");
+    } finally {
+      const btn = document.getElementById("btnCheckAnomalies");
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "🔍 Vérifier les anomalies";
+      }
+    }
+  }
+
+  // Ajouter l'event listener si le bouton existe
+  const btnCheckAnomalies = document.getElementById("btnCheckAnomalies");
+  if (btnCheckAnomalies) {
+    btnCheckAnomalies.addEventListener("click", checkAnomaliesManually);
+  }
+
+  // ================= CALCULATE AND SET AVERAGE RETURN TIME =================
+  // Quand l'utilisateur sélectionne "anomalie" dans le résultat
+  // Cette fonction calcule automatiquement l'heure de retour
+  //
+  // FLUX:
+  // 1. Récupérer l'heure de sortie de la personne
+  // 2. Calculer la durée moyenne de TOUTES les consultations avec retour
+  // 3. Heure de retour = Heure sortie + Durée moyenne
+  // 4. Remplir automatiquement le champ "heure de retour"
+  function calculateAndSetAverageReturnTime(matricule) {
+    // ========== ÉTAPE 1: Récupérer l'heure de sortie ==========
+    const pendingItem = document.querySelector(`.pending-item[data-id*="${matricule}"]`);
+    if (!pendingItem) return;
+    
+    const timeRetourInput = pendingItem.querySelector(".time-retour");
+    const heureSortieText = pendingItem.querySelector(".pending-details").textContent;
+    
+    // Extraire l'heure du texte affiché (format: "🕐 Sortie: HH:MM")
+    const sortieMatch = heureSortieText.match(/Sortie: (\d{2}:\d{2})/);
+    if (!sortieMatch) {
+      console.warn("Impossible d'extraire l'heure de sortie");
+      return;
+    }
+    
+    const heureSortie = sortieMatch[1];
+    console.log("Heure de sortie extraite: " + heureSortie);
+    
+    // ========== ÉTAPE 2: Calculer la durée moyenne ==========
+    // Cette fonction parcourt TOUTES les consultations chargées
+    // et calcule la moyenne entre retour et sortie
+    const averageMinutes = calculateAverageDurationFromConsultations();
+    console.log("Durée moyenne calculée: " + averageMinutes + " minutes (" + 
+                Math.floor(averageMinutes / 60) + "h" + (averageMinutes % 60) + ")");
+    
+    // ========== ÉTAPE 3: Ajouter la durée à l'heure de sortie ==========
+    // Formule: Heure retour = Heure sortie + Durée moyenne
+    const heureRetour = addMinutesToTimeString(heureSortie, averageMinutes);
+    console.log("Heure de retour calculée: " + heureRetour);
+    
+    // ========== ÉTAPE 4: Remplir le champ ==========
+    timeRetourInput.value = heureRetour;
+  }
+
+  // ================= CALCULATE AVERAGE DURATION FROM CONSULTATIONS =================
+  // Calcule la durée MOYENNE pour les CONSULTATIONS D'HIER SEULEMENT (J-1)
+  //
+  // FORMULE:
+  // Durée moyenne = Somme(retour - sortie) / Nombre de consultations avec retour HIER
+  //
+  // EXEMPLE:
+  //   Hier (J-1):
+  //     Consultation A: Sortie 10:00, Retour 11:30 → Durée = 90 minutes
+  //     Consultation B: Sortie 12:00, Retour 12:30 → Durée = 30 minutes
+  //   Moyenne = (90 + 30) / 2 = 120 / 2 = 60 minutes = 1h00
+  function calculateAverageDurationFromConsultations() {
+    // ========== ÉTAPE 1: Calculer la date d'HIER (J-1) ==========
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    // Formater la date d'hier pour comparaison
+    const yesterdayString = yesterday.getFullYear() + "-" + 
+                           String(yesterday.getMonth() + 1).padStart(2, "0") + "-" +
+                           String(yesterday.getDate()).padStart(2, "0");
+    
+    console.log("Calcul de la durée moyenne pour: " + yesterdayString);
+    
+    // ========== ÉTAPE 2: Vérifier si on a des données ==========
+    if (allConsultations.length === 0) {
+      console.warn("Aucune consultation chargée, utilisant durée par défaut 1h25");
+      return 85; // 1h25 par défaut
+    }
+    
+    let totalMinutes = 0;
+    let countWithReturn = 0;
+    let details = []; // Pour le log
+    
+    // ========== ÉTAPE 3: Parcourir TOUTES les consultations ==========
+    allConsultations.forEach(c => {
+      // Extraire la date de la consultation
+      let consultationDate = c.date;
+      if (!consultationDate) return;
+      
+      // Harmoniser le format de date pour comparaison
+      let dateStr = "";
+      if (consultationDate.includes("T")) {
+        // Format ISO: "2026-04-03T15:00:00Z"
+        dateStr = consultationDate.split("T")[0];
+      } else if (consultationDate.includes("-")) {
+        // Format "2026-04-03"
+        dateStr = consultationDate;
+      } else {
+        return;
+      }
+      
+      // ========== ÉTAPE 4: Vérifier que la date = HIER ==========
+      if (dateStr === yesterdayString) {
+        const heureSortie = c.heureSortie;
+        const heureRetour = c.heureRetour;
+        
+        // ========== ÉTAPE 5: Vérifier que SORTIE et RETOUR existent ==========
+        // On ne compte QUE les consultations avec un retour enregistré HIER
+        if (heureSortie && heureRetour && heureSortie !== "" && heureRetour !== "") {
+          // ========== ÉTAPE 6: Convertir en minutes ==========
+          const sortieMinutes = timeStringToMinutes(heureSortie);  // Ex: 10:00 → 600
+          const retourMinutes = timeStringToMinutes(heureRetour);  // Ex: 11:30 → 690
+          
+          if (sortieMinutes !== null && retourMinutes !== null) {
+            // ========== ÉTAPE 7: Calculer la différence ==========
+            let diffMinutes = retourMinutes - sortieMinutes;
+            
+            // Si résultat négatif, c'est parce que le retour est le lendemain
+            if (diffMinutes < 0) {
+              diffMinutes += 24 * 60; // Ajouter 24h (1440 minutes)
+            }
+            
+            // ========== ÉTAPE 8: Additionner à la durée totale ==========
+            totalMinutes += diffMinutes;
+            countWithReturn++;
+            
+            details.push({
+              nom: c.nom,
+              sortie: heureSortie,
+              retour: heureRetour,
+              duree: Math.floor(diffMinutes / 60) + "h" + (diffMinutes % 60)
+            });
+          }
+        }
+      }
+    });
+    
+    // ========== ÉTAPE 9: Calculer et retourner la moyenne ==========
+    if (countWithReturn > 0) {
+      const averageMinutes = Math.round(totalMinutes / countWithReturn);
+      console.log("✓ Durée moyenne calculée sur " + countWithReturn + " consultations d'HIER");
+      console.log("  Total: " + totalMinutes + " min, Moyenne: " + averageMinutes + " min");
+      details.forEach(d => {
+        console.log("  - " + d.nom + ": " + d.sortie + " → " + d.retour + " (" + d.duree + ")");
+      });
+      return averageMinutes;
+    } else {
+      console.warn("⚠️ Aucune consultation avec retour trouvée HIER, utilisant durée par défaut 1h25");
+      return 85; // 1h25 par défaut
+    }
+  }
+
+  // ================= TIME STRING TO MINUTES HELPER =================
+  // Convertit une heure "HH:MM" en nombre de minutes depuis minuit
+  // EXEMPLES:
+  //   "10:00" → 600 minutes (10*60 + 0)
+  //   "11:30" → 690 minutes (11*60 + 30)
+  //   "13:45" → 825 minutes (13*60 + 45)
+  function timeStringToMinutes(timeStr) {
+    if (!timeStr || typeof timeStr !== "string") return null;
+    
+    const parts = timeStr.split(":");
+    if (parts.length < 2) return null;
+    
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    
+    if (isNaN(hours) || isNaN(minutes)) return null;
+    
+    return hours * 60 + minutes;
+  }
+
+  // ================= ADD MINUTES TO TIME STRING HELPER =================
+  // Ajoute des minutes à une heure donnée
+  // EXEMPLES:
+  //   addMinutesToTimeString("10:00", 90) → "11:30"
+  //   addMinutesToTimeString("13:30", 85) → "14:55"
+  //   addMinutesToTimeString("23:00", 120) → "01:00" (lendemain)
+  function addMinutesToTimeString(timeStr, minutesToAdd) {
+    if (!timeStr || typeof timeStr !== "string") return "";
+    
+    const parts = timeStr.split(":");
+    if (parts.length < 2) return "";
+    
+    let hours = parseInt(parts[0], 10);
+    let minutes = parseInt(parts[1], 10);
+    
+    if (isNaN(hours) || isNaN(minutes)) return "";
+    
+    // ========== ÉTAPE 1: Ajouter les minutes ==========
+    minutes += minutesToAdd;
+    
+    // ========== ÉTAPE 2: Gérer le débordement des minutes ==========
+    // Si minutes >= 60, convertir en heures supplémentaires
+    if (minutes >= 60) {
+      hours += Math.floor(minutes / 60);
+      minutes = minutes % 60;
+    }
+    
+    // ========== ÉTAPE 3: Gérer le débordement des heures ==========
+    // Si heures >= 24, c'est le lendemain (modulo 24)
+    if (hours >= 24) {
+      hours = hours % 24;
+    }
+    
+    return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0");
   }
 
 });

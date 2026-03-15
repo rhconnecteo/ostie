@@ -583,6 +583,10 @@ small.warning {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
+.stat-card.stat-joursrm {
+  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+}
+
 .stat-card h3 {
   font-size: 14px;
   margin-bottom: 10px;
@@ -611,6 +615,37 @@ small.warning {
   background: rgba(255, 255, 255, 0.3);
   border-color: rgba(255, 255, 255, 0.7);
   transform: scale(1.05);
+}
+
+/* ============== ANOMALIES BUTTON ============== */
+.btn-anomalies {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+.btn-anomalies:hover {
+  background: linear-gradient(135deg, #c0392b, #a93026);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(231, 76, 60, 0.4);
+}
+
+.btn-anomalies:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+}
+
+.btn-anomalies:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* ============== CHARTS ============== */
@@ -894,6 +929,43 @@ small.warning {
 .report-stat-value {
   font-size: 32px;
   font-weight: 700;
+}
+
+/* ========== COULEURS SPÉCIFIQUES POUR LES NOUVELLES CARTES ========== */
+.report-stat-card.stat-jours-rm {
+  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+  box-shadow: 0 4px 15px rgba(39, 174, 96, 0.2);
+}
+
+.report-stat-card.stat-jours-rm:hover {
+  box-shadow: 0 8px 25px rgba(39, 174, 96, 0.4);
+}
+
+.report-stat-card.stat-jours-assistante {
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  box-shadow: 0 4px 15px rgba(231, 76, 60, 0.2);
+}
+
+.report-stat-card.stat-jours-assistante:hover {
+  box-shadow: 0 8px 25px rgba(231, 76, 60, 0.4);
+}
+
+.report-stat-card.stat-shift-nuit {
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  box-shadow: 0 4px 15px rgba(52, 152, 219, 0.2);
+}
+
+.report-stat-card.stat-shift-nuit:hover {
+  box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+}
+
+.report-stat-card.stat-anomalies {
+  background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+  box-shadow: 0 4px 15px rgba(243, 156, 18, 0.2);
+}
+
+.report-stat-card.stat-anomalies:hover {
+  box-shadow: 0 8px 25px rgba(243, 156, 18, 0.4);
 }
 
 /* ============== REPORT CHARTS GRID ============== */

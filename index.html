@@ -180,8 +180,8 @@
   <!-- ============== DASHBOARD SECTION ============== -->
   <section id="dashboard" class="section">
     <div class="container">
-      <h2>📊 Dashboard</h2>
-      <p class="section-subtitle" id="dashboardSubtitle">Vue d'ensemble de <strong>toutes les consultations</strong></p>
+      <h2>� Suivi des Retours</h2>
+      <p class="section-subtitle" id="dashboardSubtitle">Vue d'ensemble des retours et consultations <strong>d'aujourd'hui</strong></p>
 
       <!-- STATISTIQUES -->
       <div class="stats-grid">
@@ -198,6 +198,16 @@
           <p id="statRepos" class="stat-value">0</p>
           <button id="btnReposHistory" class="btn-stat-action">📊 Jour Précédent</button>
         </div>
+        <div class="stat-card stat-joursrm">
+          <h3>📋 Jours de Repos Médical</h3>
+          <p id="statJoursRM" class="stat-value">0</p>
+        </div>
+      </div>
+
+      <!-- VÉRIFIER LES ANOMALIES -->
+      <div style="margin: 20px 0; text-align: center;">
+        <button id="btnCheckAnomalies" class="btn-anomalies">🔍 Vérifier les anomalies</button>
+        <p style="font-size: 12px; color: #666; margin-top: 8px;">Marquer automatiquement les consultations non fermées depuis plus de 24h comme "anomalie"</p>
       </div>
 
       <!-- GRAPHIQUES -->
@@ -215,6 +225,9 @@
       <!-- PERSONNES EN ATTENTE DE RETOUR -->
       <div class="pending-section">
         <h3>⏳ Personnes en attente de retour</h3>
+        <div style="margin-bottom: 15px;">
+          <input type="text" id="searchPending" placeholder="🔍 Chercher par nom ou matricule..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
+        </div>
         <div id="pendingList" class="pending-list">
           <!-- Les données s'affichent ici -->
         </div>
@@ -277,6 +290,26 @@
           </div>
         </div>
 
+        <!-- STATISTIQUES SUPPLÉMENTAIRES -->
+        <div class="report-stats-grid">
+          <div class="report-stat-card stat-jours-rm">
+            <h4>📋 Jours Repos Médical</h4>
+            <p id="reportStatJoursRM" class="report-stat-value">0</p>
+          </div>
+          <div class="report-stat-card stat-jours-assistante">
+            <h4>👶 Jours Assistante Maternelle</h4>
+            <p id="reportStatJoursAssistante" class="report-stat-value">0</p>
+          </div>
+          <div class="report-stat-card stat-shift-nuit">
+            <h4>🌙 Collaborateurs Shift Nuit</h4>
+            <p id="reportStatShiftNuit" class="report-stat-value">0</p>
+          </div>
+          <div class="report-stat-card stat-anomalies">
+            <h4>⚠️ Anomalies</h4>
+            <p id="reportStatAnomalies" class="report-stat-value">0</p>
+          </div>
+        </div>
+
         <!-- GRAPHIQUES RAPPORT -->
         <div class="report-charts-grid">
           <div class="chart-container">
@@ -298,6 +331,28 @@
           <div class="chart-container">
             <h4>📉 Tendance Consultation vs RM/Assistante</h4>
             <canvas id="chartReportTendance"></canvas>
+          </div>
+        </div>
+
+        <!-- MATRICE RAPPORT PAR RATTACHEMENT -->
+        <div class="matrix-section">
+          <h4>👥 Consultations par Collaborateur</h4>
+          <div class="table-container">
+            <table id="collaboratorsTable" class="report-table">
+              <thead>
+                <tr>
+                  <th>Nom</th>
+                  <th>Nombre de Consultations</th>
+                  <th>Jours de Repos Médical</th>
+                  <th>Consultations Nuit</th>
+                  <th>Fonction</th>
+                  <th>Rattachement</th>
+                </tr>
+              </thead>
+              <tbody id="collaboratorsTableBody">
+                <!-- Les données s'affichent ici -->
+              </tbody>
+            </table>
           </div>
         </div>
 
