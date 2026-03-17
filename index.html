@@ -155,7 +155,7 @@
         <!-- Ligne 4: Retour Immédiat -->
         <div class="form-row">
           <div class="form-group checkbox-group">
-            <label class="checkbox-label">✅ Retour immédiat?</label>
+            <label class="checkbox-label">✅ Sans Retour?</label>
             <div class="checkbox-wrapper">
               <input type="checkbox" id="retourImmediately">
             </div>
@@ -230,6 +230,34 @@
         </div>
         <div id="pendingList" class="pending-list">
           <!-- Les données s'affichent ici -->
+        </div>
+      </div>
+
+      <!-- CONSULTATIONS DU JOUR (Visible pour tous) -->
+      <div class="today-consultations-section" style="margin-top: 40px; padding: 20px; background: #f9f9f9; border-radius: 8px;">
+        <h3>📋 Consultations d'Aujourd'hui</h3>
+        <div style="margin-bottom: 15px;">
+          <input type="text" id="searchTodayConsultations" placeholder="🔍 Chercher par nom ou matricule..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
+        </div>
+        <div class="table-container">
+          <table id="todayConsultationsTable" class="report-table" style="width: 100%; font-size: 13px;">
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Matricule</th>
+                <th>Type</th>
+                <th>Lieu</th>
+                <th>Shift</th>
+                <th>Heure Sortie</th>
+                <th>Heure Retour</th>
+                <th>Résultat</th>
+                <th>Statut</th>
+              </tr>
+            </thead>
+            <tbody id="todayConsultationsBody">
+              <!-- Les données s'affichent ici -->
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

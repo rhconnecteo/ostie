@@ -1,10 +1,14 @@
 document.addEventListener("DOMContentLoaded", function () {
 
-  const API_URL = "https://script.google.com/macros/s/AKfycbyAC_2REMBxsH6YWYYDcNUAN7lPu4tF4wauOR4gKosPPiauO6DXTP04Mcm99VQTywNenw/exec";
-  
-  
+  const API_URL = "https://script.google.com/macros/s/AKfycbwt98rpAMmDKSVUSqUpg_72fysCO_ZSJ07pzDUa6nCccrnu4RGI9R3hX8I6FGLbUADAPg/exec";
+
+
+
   // ================= STATE =================
   let isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+  let userPassword = localStorage.getItem("userPassword") || "";
+  let userType = localStorage.getItem("userType") || ""; // "OSTIE", "COMETE", ou "INSHORE"
+  let authorizedRattachements = []; // Filtre par domaine
   let allCollaborateurs = [];
   let allConsultations = [];
   let chartCamembert = null;
@@ -251,36 +255,125 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // ================= LOGIN =================
-  loginForm.addEventListener("submit", function (e) {
+  loginForm.addEventListener("submit", async function (e) {
     e.preventDefault();
     const username = usernameInput.value.trim();
     const password = passwordInput.value.trim();
 
     console.log("Tentative de login:", {username, password});
 
-    if (username === "admin" && password === "ostie") {
-      isLoggedIn = true;
-      localStorage.setItem("isLoggedIn", "true");
-      loginError.textContent = "";
-      loginPage.classList.remove("active");
-      appPage.classList.add("active");
-      usernameInput.value = "";
-      passwordInput.value = "";
-      showMessage("✅ Connecté avec succès!");
-      loadCollaborateurs();
-    } else {
-      console.warn("Login échoué - identifiants incorrects");
-      loginError.textContent = "❌ Identifiant ou mot de passe incorrect (admin/ostie)";
+    try {
+      const response = await fetch(`${API_URL}?action=validateLogin&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`);
+      const result = await response.json();
+
+      if (result.success) {
+        isLoggedIn = true;
+        userPassword = password;
+        userType = result.type; // "OSTIE", "COMETE", ou "INSHORE"
+        localStorage.setItem("isLoggedIn", "true");
+        localStorage.setItem("userPassword", password);
+        localStorage.setItem("userType", userType);
+        loginError.textContent = "";
+        loginPage.classList.remove("active");
+        appPage.classList.add("active");
+        usernameInput.value = "";
+        passwordInput.value = "";
+        showMessage("✅ Connecté avec succès!");
+        
+        // Adapter l'interface selon le type d'utilisateur
+        setupUIForUserType(userType);
+        
+        loadCollaborateurs();
+      } else {
+        console.warn("Login échoué - identifiants incorrects");
+        loginError.textContent = "❌ " + result.message;
+      }
+    } catch (err) {
+      console.error("Erreur login:", err);
+      loginError.textContent = "❌ Erreur lors de la connexion";
     }
   });
 
   logoutBtn.addEventListener("click", function () {
     isLoggedIn = false;
+    userPassword = "";
+    userType = "";
     localStorage.setItem("isLoggedIn", "false");
+    localStorage.setItem("userPassword", "");
+    localStorage.setItem("userType", "");
     loginPage.classList.add("active");
     appPage.classList.remove("active");
     resetForm();
   });
+
+  // ================= SETUP UI FOR USER TYPE =================
+  function setupUIForUserType(type) {
+    const formulaireSection = document.getElementById("formulaire");
+    const dashboardSection = document.getElementById("dashboard");
+    const rapportSection = document.getElementById("rapport");
+
+    // Déterminer les rattachements autorisés
+    authorizedRattachements = [];
+    if (type === "OSTIE") {
+      authorizedRattachements = []; // Tous les rattachements
+    } else if (type === "COMETE") {
+      authorizedRattachements = ["Comete"];
+    } else if (type === "INSHORE") {
+      authorizedRattachements = ["Contact Center MVOLA", "Contact Center YAS", "Contact Center OPENFIELD"];
+    }
+
+    if (type === "OSTIE") {
+      // Admin complet: voir formulaire + dashboard + rapport
+      // Ne pas mettre display:none en inline - laisser les CSS rules gérer via .active
+      
+      // Afficher tous les boutons de nav
+      navBtns.forEach(btn => btn.style.display = "inline-block");
+      
+      // Afficher le premier formulaire par défaut
+      sections.forEach(s => s.classList.remove("active"));
+      if (formulaireSection) formulaireSection.classList.add("active");
+      navBtns.forEach(b => b.classList.remove("active"));
+      navBtns[0].classList.add("active"); // Sélectionner "Formulaire"
+      
+      // ✅ Afficher le bouton "Vérifier les anomalies" pour OSTIE
+      const btnCheckAnomalies = document.getElementById("btnCheckAnomalies");
+      if (btnCheckAnomalies) btnCheckAnomalies.style.display = "block";
+    } else if (type === "COMETE" || type === "INSHORE") {
+      // Lecteur rapport: voir dashboard + rapport (sans formulaire)
+      // Ne pas mettre display:none en inline - laisser les CSS rules gérer via .active
+      
+      // Cacher les boutons Formulaire de la nav, afficher Dashboard et Rapport
+      navBtns.forEach(btn => {
+        const section = btn.dataset.section;
+        if (section === "formulaire") {
+          btn.style.display = "none";
+        } else {
+          btn.style.display = "inline-block";
+        }
+      });
+      
+      // Afficher le dashboard par défaut
+      sections.forEach(s => s.classList.remove("active"));
+      if (dashboardSection) dashboardSection.classList.add("active");
+      
+      // Sélectionner le bouton "Dashboard" dans la nav
+      navBtns.forEach(b => b.classList.remove("active"));
+      const dashboardBtn = document.querySelector('[data-section="dashboard"]');
+      if (dashboardBtn) dashboardBtn.classList.add("active");
+      
+      // ❌ Cacher le bouton "Vérifier les anomalies" pour Comete/Inshore
+      const btnCheckAnomalies = document.getElementById("btnCheckAnomalies");
+      if (btnCheckAnomalies) btnCheckAnomalies.style.display = "none";
+    }
+  }
+
+  // ================= HELPER: FILTER BY DOMAIN =================
+  function filterByDomain(consultations) {
+    if (authorizedRattachements.length === 0) {
+      return consultations; // OSTIE: tous les rattachements
+    }
+    return consultations.filter(c => authorizedRattachements.includes(c.rattachement));
+  }
 
   // ================= NAV BUTTONS =================
   navBtns.forEach(btn => {
@@ -298,8 +391,8 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       if (sectionName === "rapport") {
-        // Charger tous les consultations du rapport
-        displayReport(allConsultations);
+        // Charger tous les consultations du rapport (filtrés par domaine)
+        displayReport(filterByDomain(allConsultations));
       }
     });
   });
@@ -323,6 +416,9 @@ document.addEventListener("DOMContentLoaded", function () {
       allCollaborateurs = json.data;
       populateSelect("");
       console.log("Collaborateurs chargés avec succès:", allCollaborateurs.length);
+      
+      // Charger les consultations pour afficher le rapport
+      loadDashboardData();
 
     } catch (e) {
       console.error("Erreur chargement collaborateurs :", e);
@@ -614,22 +710,39 @@ document.addEventListener("DOMContentLoaded", function () {
   // ================= DASHBOARD =================
   async function loadDashboardData() {
     try {
-      const res = await fetch(`${API_URL}?action=getConsultations`);
+      console.log("🔄 Chargement dashboard - userPassword:", userPassword, "userType:", userType);
+      const res = await fetch(`${API_URL}?action=getConsultations&password=${encodeURIComponent(userPassword)}`);
       const json = await res.json();
+      
+      console.log("✅ Réponse API:", json);
 
       if (!json.success) throw new Error(json.error);
 
       allConsultations = json.data || [];
+      console.log("📊 Consultations chargées:", allConsultations.length);
+      console.log("🔒 Filtre domaine attendu:", authorizedRattachements);
+      
+      // DEBUG: voir les rattachements réels dans les données
+      const rattachmentsReels = [...new Set(allConsultations.map(c => c.rattachement))];
+      console.log("🏢 Rattachements réels dans les données:", rattachmentsReels);
+      console.log("📄 Première consultation:", allConsultations[0]);
+      
+      const filteredData = filterByDomain(allConsultations);
+      console.log("🎯 Données filtrées:", filteredData.length);
       
       updateStatistics();
       updateCharts();
       updatePendingList();
+      updateTodayConsultationsTable(); // Afficher la table des consultations du jour
       updateDashboardInfo(); // Mettre à jour l'indicateur de période
       populateFilterSelects(); // Remplir les sélects des filtres
-      displayReport(allConsultations); // Afficher le rapport initial
+      displayReport(filteredData); // Afficher le rapport initial (filtré)
 
     } catch (e) {
-      console.error("Erreur chargement dashboard :", e);
+      console.error("❌ Erreur chargement dashboard :", e);
+      if (reportTableBody) {
+        reportTableBody.innerHTML = '<tr><td colspan="12" style="color: red;">❌ Erreur: ' + e.message + '</td></tr>';
+      }
     }
   }
 
@@ -659,28 +772,42 @@ document.addEventListener("DOMContentLoaded", function () {
   function updateStatistics() {
     // ========== AFFICHER LES STATISTIQUES D'AUJOURD'HUI SEULEMENT ==========
     const todayConsultations = getTodayConsultations();
-    const total = todayConsultations.length;
     
-    // ========== EN ATTENTE: Consultations d'AUJOURD'HUI sans retour ==========
-    const enAttente = todayConsultations.filter(c => !c.heureRetour || c.heureRetour === "").length;
+    // ========== FILTRÉES PAR DOMAINE ==========
+    const filteredToday = filterByDomain(todayConsultations);
     
-    // ========== REPOS MÉDICAL: Compter "Repos médical" d'AUJOURD'HUI ==========
-    const repos = todayConsultations.filter(c => c.resultat === "Repos médical").length;
+    const total = filteredToday.length;
     
-    // ========== JOURS RM: Somme des jours de repos médical d'AUJOURD'HUI ==========
-    const joursRM = todayConsultations.reduce((sum, c) => {
-      const jours = parseInt(c.nbJourRM) || 0;
+    // ========== EN ATTENTE: TOTAL de TOUS les jours et TOUS les domaines ==========
+    const enAttenteTotal = allConsultations.filter(c => {
+      const heureRetour = c.heureRetour || c.heure_retour || "";
+      return !heureRetour || heureRetour.trim() === "";
+    }).length;
+    
+    // ========== EN ATTENTE dans MON DOMAINE (d'aujourd'hui) ==========
+    const enAttenteMyDomain = filteredToday.filter(c => {
+      const heureRetour = c.heureRetour || c.heure_retour || "";
+      return !heureRetour || heureRetour.trim() === "";
+    }).length;
+    
+    // ========== REPOS MÉDICAL: Filtrés par domaine ==========
+    const repos = filteredToday.filter(c => c.resultat === "Repos médical").length;
+    
+    // ========== JOURS RM: Somme FILTRÉE par domaine ==========
+    const joursRM = filteredToday.reduce((sum, c) => {
+      const jours = parseFloat(c.nbJourRM) || 0;
       return sum + jours;
     }, 0);
 
     statTotal.textContent = total;
-    statEnAttente.textContent = enAttente;
+    // Afficher le nombre TOTAL d'attente (tous domaines) mais aussi mon domaine
+    statEnAttente.textContent = enAttenteMyDomain + " / " + enAttenteTotal;
     statRepos.textContent = repos;
     
     // Si le stat pour jours RM existe, le remplir
     const statJoursRM = document.getElementById("statJoursRM");
     if (statJoursRM) {
-      statJoursRM.textContent = joursRM;
+      statJoursRM.textContent = joursRM.toFixed(1);
     }
   }
 
@@ -777,10 +904,11 @@ document.addEventListener("DOMContentLoaded", function () {
   function updateCharts() {
     // ========== UTILISER LES CONSULTATIONS D'AUJOURD'HUI SEULEMENT ==========
     const todayConsultations = getTodayConsultations();
+    const filteredToday = filterByDomain(todayConsultations);
     
-    const consultation = todayConsultations.filter(c => c.resultat === "Consultation médical").length;
-    const repos = todayConsultations.filter(c => c.resultat === "Repos médical").length;
-    const assistante = todayConsultations.filter(c => c.resultat === "Assistante maternelle").length;
+    const consultation = filteredToday.filter(c => c.resultat === "Consultation médical").length;
+    const repos = filteredToday.filter(c => c.resultat === "Repos médical").length;
+    const assistante = filteredToday.filter(c => c.resultat === "Assistante maternelle").length;
     const total = consultation + repos + assistante;
 
     // Chart Camembert - Répartition de tous les types de résultats
@@ -827,9 +955,10 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
 
-    // Chart Jours - Consultations totales par jour
+    // Chart Jours - Consultations totales par jour (filtrées par domaine)
+    const filteredAllConsultations = filterByDomain(allConsultations);
     const consultationParJour = {};
-    allConsultations.forEach(c => {
+    filteredAllConsultations.forEach(c => {
       const correctedDate = extractAndCorrectDate(c.date);
       const dateKey = correctedDate !== "-" ? correctedDate : "";
       consultationParJour[dateKey] = (consultationParJour[dateKey] || 0) + 1;
@@ -868,20 +997,77 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // ================= UPDATE TODAY CONSULTATIONS TABLE =================
+  function updateTodayConsultationsTable() {
+    const todayConsultations = getTodayConsultations();
+    const filteredConsultations = filterByDomain(todayConsultations);
+    const todayConsultationsBody = document.getElementById("todayConsultationsBody");
+    
+    if (!todayConsultationsBody) return;
+    
+    if (filteredConsultations.length === 0) {
+      todayConsultationsBody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px; color: #999;">Aucune consultation d\'aujourd\'hui</td></tr>';
+      return;
+    }
+    
+    todayConsultationsBody.innerHTML = filteredConsultations.map(c => {
+      const heureRetour = c.heure_retour || c.heureRetour || "";
+      const hasRetour = heureRetour && heureRetour.trim() !== "";
+      const statut = hasRetour ? "✅ Complète" : "⏳ En attente";
+      const statutClass = hasRetour ? "complete" : "pending";
+      
+      return `
+        <tr>
+          <td><strong>${c.nom || ''}</strong></td>
+          <td>${c.matricule || ''}</td>
+          <td>${c.type_consultation || c.typeConsultation || ''}</td>
+          <td>${c.lieu_consultation || c.lieuConsultation || ''}</td>
+          <td>${c.shift || ''}</td>
+          <td>${extractTimeFromISO(c.heure_sortie || c.heureSortie)}</td>
+          <td>${hasRetour ? extractTimeFromISO(heureRetour) : '--'}</td>
+          <td>${c.resultat || '--'}</td>
+          <td><span class="statut-badge ${statutClass}">${statut}</span></td>
+        </tr>
+      `;
+    }).join("");
+    
+    // ========== RECHERCHE DANS LA TABLE ==========
+    const searchInput = document.getElementById("searchTodayConsultations");
+    if (searchInput) {
+      searchInput.addEventListener("input", function () {
+        const searchTerm = this.value.toLowerCase();
+        const rows = todayConsultationsBody.querySelectorAll("tr");
+        rows.forEach(row => {
+          const text = row.textContent.toLowerCase();
+          row.style.display = text.includes(searchTerm) ? "" : "none";
+        });
+      });
+    }
+  }
+
   /**
    * Obtient les consultations en attente de retour
    * @returns {Array} Consultations sans heure de retour enregistrée
    */
   function getPendingConsultations() {
-    return allConsultations.filter(c => !c.heureRetour);
+    return allConsultations.filter(c => {
+      const heureRetour = c.heureRetour || c.heure_retour || "";
+      return !heureRetour || heureRetour.trim() === "";
+    });
   }
 
   function updatePendingList() {
-    const pending = getPendingConsultations();
-    let allPendingItems = pending; // Garder la liste complète pour la recherche
+    const allPending = getPendingConsultations(); // TOUS les en attente
+    const filteredPending = filterByDomain(allPending); // Filtrés par domaine
+    let allPendingItems = filteredPending; // Garder la liste filtrée for search
 
-    if (pending.length === 0) {
-      pendingList.innerHTML = '<div class="empty-pending">✓ Tous les collaborateurs sont de retour !</div>';
+    // Mettre à jour le nombre d'attente dans la section
+    if (waitingCount) {
+      waitingCount.textContent = allPending.length; // Nombre TOTAL
+    }
+
+    if (filteredPending.length === 0) {
+      pendingList.innerHTML = '<div class="empty-pending">✓ Tous les collaborateurs de votre domaine sont de retour !</div>';
       return;
     }
 
@@ -922,8 +1108,8 @@ document.addEventListener("DOMContentLoaded", function () {
       attachPendingEventListeners();
     }
 
-    // Afficher la liste initiale
-    displayPendingList(pending);
+    // Afficher la liste filtrée
+    displayPendingList(filteredPending);
 
     // ========== AJOUTER LA RECHERCHE ==========
     const searchPending = document.getElementById("searchPending");
@@ -1104,9 +1290,11 @@ document.addEventListener("DOMContentLoaded", function () {
    * Remplir les sélects des filtres (Rattachement et Fonction)
    */
   function populateFilterSelects() {
-    // Extraire les valeurs uniques de rattachement
+    const filteredConsultations = filterByDomain(allConsultations);
+
+    // Extraire les valeurs uniques de rattachement (filtrées)
     const rattachements = new Set();
-    allConsultations.forEach(c => {
+    filteredConsultations.forEach(c => {
       if (c.rattachement && c.rattachement !== "-") {
         rattachements.add(c.rattachement);
       }
@@ -1143,6 +1331,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ================= RAPPORT CONSULTATIONS PASSÉES =================
   function displayReport(consultations) {
+    console.log("📋 displayReport - Consultations:", consultations.length, "reportTableBody existe:", !!reportTableBody);
+    
+    if (!reportTableBody) {
+      console.error("❌ reportTableBody n'existe pas!");
+      return;
+    }
+    
     reportTableBody.innerHTML = "";
 
     if (consultations.length === 0) {
@@ -1652,7 +1847,7 @@ document.addEventListener("DOMContentLoaded", function () {
       filterToDate.value = "";
       filterRattachement.value = "";
       filterFonction.value = "";
-      displayReport(allConsultations);
+      displayReport(filterByDomain(allConsultations));
     });
   }
 
