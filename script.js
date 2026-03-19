@@ -1,18 +1,47 @@
 document.addEventListener("DOMContentLoaded", function () {
 
-  const API_URL = "https://script.google.com/macros/s/AKfycbwt98rpAMmDKSVUSqUpg_72fysCO_ZSJ07pzDUa6nCccrnu4RGI9R3hX8I6FGLbUADAPg/exec";
-
+  const API_URL = "https://script.google.com/macros/s/AKfycbxVDcI3GdbMkJ9WowDIsYSIPPuH2SLQO1X4DwVd4Kot2w39-6r0HkEYdWatk3lvbX6tWg/exec";
 
 
   // ================= STATE =================
   let isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
   let userPassword = localStorage.getItem("userPassword") || "";
-  let userType = localStorage.getItem("userType") || ""; // "OSTIE", "COMETE", ou "INSHORE"
+  let userType = localStorage.getItem("userType") || ""; // "OSTIE_ADMIN" ou "PRODUCTION_VIEWER"
+  let userPermissions = localStorage.getItem("userPermissions") || ""; // "all" ou "readonly"
   let authorizedRattachements = []; // Filtre par domaine
   let allCollaborateurs = [];
   let allConsultations = [];
   let chartCamembert = null;
   let chartJours = null;
+
+  // ================= LOAD WAITING LIST FROM STORAGE =================
+  // Créer une clé unique par utilisateur pour éviter les conflits multi-utilisateurs
+  function getWaitingListStorageKey() {
+    if (userPassword) {
+      return `waitingPersonnes_${userPassword}`;
+    }
+    return "waitingPersonnes_default";
+  }
+
+  let waitingPersonnesStorageKey = getWaitingListStorageKey();
+  let waitingPersonnesData = localStorage.getItem(waitingPersonnesStorageKey) || "[]";
+  let waitingPersonnes = [];
+  
+  // Validation et parsing sécurisé
+  if (isLoggedIn && userPassword) {
+    try {
+      waitingPersonnes = JSON.parse(waitingPersonnesData);
+      if (!Array.isArray(waitingPersonnes)) {
+        console.warn("⚠️ waitingPersonnes n'est pas un tableau, réinitialisation");
+        waitingPersonnes = [];
+      }
+    } catch (e) {
+      console.warn("Erreur de parsing waitingPersonnes depuis localStorage:", e);
+      waitingPersonnes = [];
+    }
+  } else {
+    waitingPersonnes = [];
+  }
 
   // ================= SLOGANS & MOTTOS =================
   const slogans = [
@@ -111,7 +140,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const btnFilterReport = document.getElementById("btnFilterReport");
   const btnResetReport = document.getElementById("btnResetReport");
   const btnPreviousDay = document.getElementById("btnPreviousDay");
-  const btnReposHistory = document.getElementById("btnReposHistory");
   const reportTableBody = document.getElementById("reportTableBody");
   
   // Report Stats Elements
@@ -132,7 +160,11 @@ document.addEventListener("DOMContentLoaded", function () {
   const waitingList = document.getElementById("waitingList");
   const waitingCount = document.getElementById("waitingCount");
   const btnAddToWaiting = document.getElementById("btnAddToWaiting");
-  let waitingPersonnes = []; // Stocke les personnes en attente
+
+  // ================= SAVE WAITING LIST TO STORAGE =================
+  function saveWaitingList() {
+    localStorage.setItem(waitingPersonnesStorageKey, JSON.stringify(waitingPersonnes));
+  }
 
   function rotateSlogan() {
     const mottoText = document.getElementById("mottoText");
@@ -269,10 +301,12 @@ document.addEventListener("DOMContentLoaded", function () {
       if (result.success) {
         isLoggedIn = true;
         userPassword = password;
-        userType = result.type; // "OSTIE", "COMETE", ou "INSHORE"
+        userType = result.type; // "OSTIE_ADMIN" ou "PRODUCTION_VIEWER"
+        userPermissions = result.permissions; // "all" ou "readonly"
         localStorage.setItem("isLoggedIn", "true");
         localStorage.setItem("userPassword", password);
         localStorage.setItem("userType", userType);
+        localStorage.setItem("userPermissions", userPermissions);
         loginError.textContent = "";
         loginPage.classList.remove("active");
         appPage.classList.add("active");
@@ -280,8 +314,22 @@ document.addEventListener("DOMContentLoaded", function () {
         passwordInput.value = "";
         showMessage("✅ Connecté avec succès!");
         
+        // Recalculer la clé de la liste d'attente pour ce nouvel utilisateur
+        waitingPersonnesStorageKey = getWaitingListStorageKey();
+        // Recharger la liste d'attente du nouvel utilisateur
+        waitingPersonnesData = localStorage.getItem(waitingPersonnesStorageKey) || "[]";
+        try {
+          waitingPersonnes = JSON.parse(waitingPersonnesData);
+          if (!Array.isArray(waitingPersonnes)) {
+            waitingPersonnes = [];
+          }
+        } catch (e) {
+          console.warn("⚠️ Erreur restauration liste d'attente:", e);
+          waitingPersonnes = [];
+        }
+        
         // Adapter l'interface selon le type d'utilisateur
-        setupUIForUserType(userType);
+        setupUIForUserType(userType, userPermissions);
         
         loadCollaborateurs();
       } else {
@@ -298,31 +346,28 @@ document.addEventListener("DOMContentLoaded", function () {
     isLoggedIn = false;
     userPassword = "";
     userType = "";
+    userPermissions = "";
+    waitingPersonnes = []; // Effacer la liste d'attente
     localStorage.setItem("isLoggedIn", "false");
     localStorage.setItem("userPassword", "");
     localStorage.setItem("userType", "");
+    localStorage.setItem("userPermissions", "");
+    localStorage.setItem(waitingPersonnesStorageKey, "[]"); // Effacer la liste d'attente du storage
     loginPage.classList.add("active");
     appPage.classList.remove("active");
     resetForm();
   });
 
   // ================= SETUP UI FOR USER TYPE =================
-  function setupUIForUserType(type) {
+  function setupUIForUserType(type, permissions) {
     const formulaireSection = document.getElementById("formulaire");
     const dashboardSection = document.getElementById("dashboard");
     const rapportSection = document.getElementById("rapport");
 
     // Déterminer les rattachements autorisés
-    authorizedRattachements = [];
-    if (type === "OSTIE") {
-      authorizedRattachements = []; // Tous les rattachements
-    } else if (type === "COMETE") {
-      authorizedRattachements = ["Comete"];
-    } else if (type === "INSHORE") {
-      authorizedRattachements = ["Contact Center MVOLA", "Contact Center YAS", "Contact Center OPENFIELD"];
-    }
+    authorizedRattachements = []; // Tous les rattachements pour les deux types
 
-    if (type === "OSTIE") {
+    if (type === "OSTIE_ADMIN" && permissions === "all") {
       // Admin complet: voir formulaire + dashboard + rapport
       // Ne pas mettre display:none en inline - laisser les CSS rules gérer via .active
       
@@ -338,11 +383,11 @@ document.addEventListener("DOMContentLoaded", function () {
       // ✅ Afficher le bouton "Vérifier les anomalies" pour OSTIE
       const btnCheckAnomalies = document.getElementById("btnCheckAnomalies");
       if (btnCheckAnomalies) btnCheckAnomalies.style.display = "block";
-    } else if (type === "COMETE" || type === "INSHORE") {
-      // Lecteur rapport: voir dashboard + rapport (sans formulaire)
+    } else if (type === "PRODUCTION_VIEWER" && permissions === "readonly") {
+      // Lecteur Production: voir SEULEMENT dashboard et rapport (SANS formulaire)
       // Ne pas mettre display:none en inline - laisser les CSS rules gérer via .active
       
-      // Cacher les boutons Formulaire de la nav, afficher Dashboard et Rapport
+      // Cacher le bouton Formulaire de la nav, afficher Dashboard et Rapport
       navBtns.forEach(btn => {
         const section = btn.dataset.section;
         if (section === "formulaire") {
@@ -361,7 +406,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const dashboardBtn = document.querySelector('[data-section="dashboard"]');
       if (dashboardBtn) dashboardBtn.classList.add("active");
       
-      // ❌ Cacher le bouton "Vérifier les anomalies" pour Comete/Inshore
+      // ❌ Cacher le bouton "Vérifier les anomalies" pour Production
       const btnCheckAnomalies = document.getElementById("btnCheckAnomalies");
       if (btnCheckAnomalies) btnCheckAnomalies.style.display = "none";
     }
@@ -449,12 +494,27 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // ================= AUTO-LOGIN ON PAGE LOAD =================
-  // Désactivé - force l'utilisateur à se reconnecter à chaque fois
-  // if (isLoggedIn) {
-  //   loginPage.classList.remove("active");
-  //   appPage.classList.add("active");
-  //   loadCollaborateurs();
-  // }
+  // Accepté - restoration automatique de la session
+  if (isLoggedIn && userPassword && userType && userPermissions) {
+    console.log("🔄 Auto-login détecté - Restauration de la session");
+    console.log("📋 Liste d'attente avant restore:", waitingPersonnes.length, "personne(s)");
+    
+    // IMPORTANT: S'assurer que les éléments DOM sont prêts avant de mettre à jour
+    setTimeout(() => {
+      loginPage.classList.remove("active");
+      appPage.classList.add("active");
+      setupUIForUserType(userType, userPermissions);
+      
+      // Afficher la liste d'attente si elle existe
+      if (waitingPersonnes.length > 0) {
+        updateWaitingList();
+        console.log("📋 Liste d'attente affichée:", waitingPersonnes.length, "personne(s)");
+      }
+      
+      // Charger les données du dashboard
+      loadCollaborateurs();
+    }, 100);
+  }
 
   // ================= SEARCH INPUT =================
   searchInput.addEventListener("input", function () {
@@ -560,23 +620,47 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
 
-      const c = JSON.parse(collaborateurSelect.value);
-      
-      // Vérifier si déjà en attente
-      if (waitingPersonnes.some(p => p.matricule === c.matricule)) {
-        showMessage("⚠️ Cette personne est déjà en attente", "error");
-        return;
-      }
+      try {
+        const c = JSON.parse(collaborateurSelect.value);
+        
+        // Vérifier que l'objet est valide
+        if (!c || !c.matricule || !c.nom) {
+          showMessage("❌ Données de collaborateur invalides", "error");
+          return;
+        }
+        
+        // Vérifier si déjà en attente
+        if (waitingPersonnes.some(p => p.matricule === c.matricule)) {
+          showMessage("⚠️ Cette personne est déjà en attente", "error");
+          return;
+        }
 
-      waitingPersonnes.push(c);
-      updateWaitingList();
-      showMessage("✅ Ajouté à la liste d'attente");
-      collaborateurSelect.value = "";
-      searchInput.value = "";
+        waitingPersonnes.push(c);
+        saveWaitingList(); // Sauvegarder dans localStorage
+        updateWaitingList();
+        showMessage("✅ Ajouté à la liste d'attente");
+        collaborateurSelect.value = "";
+        if (searchInput) searchInput.value = "";
+      } catch (e) {
+        console.error("⚠️ Erreur lors de l'ajout à la liste d'attente:", e);
+        showMessage("❌ Erreur: impossible d'ajouter à la liste d'attente", "error");
+      }
     });
   }
 
   function updateWaitingList() {
+    // Vérifier que les éléments DOM existent
+    if (!waitingCount || !waitingList || !waitingSection) {
+      console.warn("⚠️ Éléments DOM manquants pour updateWaitingList");
+      return;
+    }
+    
+    // Double-vérifier que waitingPersonnes est un tableau valide
+    if (!Array.isArray(waitingPersonnes)) {
+      console.warn("⚠️ waitingPersonnes n'est pas un tableau, réinitialisation");
+      waitingPersonnes = [];
+    }
+    
     waitingCount.textContent = waitingPersonnes.length;
     waitingList.innerHTML = "";
 
@@ -588,6 +672,12 @@ document.addEventListener("DOMContentLoaded", function () {
     waitingSection.style.display = "block";
 
     waitingPersonnes.forEach((personne, index) => {
+      // Vérifier que l'objet personne a les champs requis
+      if (!personne || !personne.matricule || !personne.nom) {
+        console.warn("⚠️ Données invalides dans waitingPersonnes à l'index", index, personne);
+        return;
+      }
+      
       const item = document.createElement("div");
       item.className = "waiting-item";
       item.innerHTML = `
@@ -610,7 +700,22 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function selectFromWaiting(index) {
+    if (index < 0 || index >= waitingPersonnes.length) {
+      console.error("⚠️ Index invalide pour selectFromWaiting:", index);
+      return;
+    }
+    
     const personne = waitingPersonnes[index];
+    if (!personne || !personne.matricule || !personne.nom) {
+      console.error("⚠️ Personne invalide à l'index", index);
+      return;
+    }
+    
+    // Vérifier que les éléments du formulaire existent
+    if (!collaborateurSelect || !matriculeSpan || !nomPrenomSpan || !fonctionSpan || !rattachementSpan || !dateInput || !heureSortieInput) {
+      console.error("⚠️ Éléments de formulaire manquants");
+      return;
+    }
     
     // Remplir le formulaire
     collaborateurSelect.value = JSON.stringify(personne);
@@ -631,6 +736,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Retirer de la liste d'attente
     waitingPersonnes.splice(index, 1);
+    saveWaitingList(); // Sauvegarder dans localStorage
     updateWaitingList();
 
     showMessage("✅ Personne sélectionnée, veuillez compléter le formulaire");
@@ -640,12 +746,19 @@ document.addEventListener("DOMContentLoaded", function () {
   formConsultation.addEventListener("submit", async function (e) {
     e.preventDefault();
 
+    // Vérification de permissions: bloquer si mode production (readonly)
+    if (userPermissions === "readonly") {
+      showMessage("❌ Accès refusé: Mode production en lecture seule", "error");
+      return;
+    }
+
     if (!validateForm()) return;
 
     const c = JSON.parse(collaborateurSelect.value);
 
     const params = new URLSearchParams({
       action: "saveConsultation",
+      password: userPassword,
       matricule: c.matricule,
       nom: c.nom,
       prenom: c.prenom || "",
@@ -800,8 +913,8 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 0);
 
     statTotal.textContent = total;
-    // Afficher le nombre TOTAL d'attente (tous domaines) mais aussi mon domaine
-    statEnAttente.textContent = enAttenteMyDomain + " / " + enAttenteTotal;
+    // Afficher seulement le nombre en attente d'aujourd'hui
+    statEnAttente.textContent = enAttenteMyDomain;
     statRepos.textContent = repos;
     
     // Si le stat pour jours RM existe, le remplir
@@ -809,6 +922,85 @@ document.addEventListener("DOMContentLoaded", function () {
     if (statJoursRM) {
       statJoursRM.textContent = joursRM.toFixed(1);
     }
+
+    // Afficher les cartes de rattachement si en mode production
+    if (userPermissions === "readonly") {
+      updateRattachementCards();
+    }
+  }
+
+  // ================= UPDATE RATTACHEMENT CARDS =================
+  function updateRattachementCards() {
+    const todayConsultations = getTodayConsultations();
+    
+    // Grouper par rattachement
+    const rattachementMap = {};
+    todayConsultations.forEach(c => {
+      const rattachement = c.rattachement || "Non spécifié";
+      if (!rattachementMap[rattachement]) {
+        rattachementMap[rattachement] = {
+          name: rattachement,
+          total: 0,
+          complete: 0,
+          pending: 0
+        };
+      }
+      rattachementMap[rattachement].total++;
+      
+      const heureRetour = c.heureRetour || c.heure_retour || "";
+      if (heureRetour && heureRetour.trim() !== "") {
+        rattachementMap[rattachement].complete++;
+      } else {
+        rattachementMap[rattachement].pending++;
+      }
+    });
+    
+    // Convertir en tableau et trier
+    const rattachements = Object.values(rattachementMap).sort((a, b) => b.total - a.total);
+    
+    const cardsSection = document.getElementById("rattachementCardsSection");
+    const cardsContainer = document.getElementById("rattachementCards");
+    
+    if (!cardsContainer) return;
+    
+    // Afficher la section si au moins un rattachement existe
+    if (rattachements.length > 0) {
+      cardsSection.style.display = "block";
+    } else {
+      cardsSection.style.display = "none";
+      return;
+    }
+    
+    // Générer les cartes
+    cardsContainer.innerHTML = rattachements.map(r => {
+      const percentComplete = r.total > 0 ? Math.round((r.complete / r.total) * 100) : 0;
+      const isAlert = r.pending > 0;
+      const cardClass = isAlert ? "rattachement-card alert" : "rattachement-card complete";
+      
+      return `
+        <div class="${cardClass}">
+          <div class="rattachement-card-title">🏢 ${r.name}</div>
+          <div class="rattachement-card-stat">
+            <span class="rattachement-card-stat-label">Total:</span>
+            <span class="rattachement-card-stat-value">${r.total}</span>
+          </div>
+          <div class="rattachement-card-stat">
+            <span class="rattachement-card-stat-label">✅ Complètes:</span>
+            <span class="rattachement-card-stat-value">${r.complete}</span>
+          </div>
+          <div class="rattachement-card-stat">
+            <span class="rattachement-card-stat-label">⏳ En attente:</span>
+            <span class="rattachement-card-stat-value">${r.pending}</span>
+          </div>
+          <div class="rattachement-card-progress">
+            <div class="rattachement-card-progress-label">Taux de complétion: ${percentComplete}%</div>
+            <div class="rattachement-card-progress-bar">
+              <div class="rattachement-card-progress-fill" style="width: ${percentComplete}%"></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
   }
 
   // ========== TABLEAU DÉTAILLÉ DES COLLABORATEURS ==========
@@ -1068,63 +1260,172 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (filteredPending.length === 0) {
       pendingList.innerHTML = '<div class="empty-pending">✓ Tous les collaborateurs de votre domaine sont de retour !</div>';
+      populatePendingFilters([]);
       return;
     }
 
+    // Remplir les filtres avec les options uniques
+    populatePendingFilters(filteredPending);
+
     // Fonction pour afficher/filtrer la liste
     function displayPendingList(itemsToDisplay) {
-      pendingList.innerHTML = itemsToDisplay.map(c => `
-        <div class="pending-item" data-id="${c.id || c.matricule}" data-search="${(c.nom + ' ' + c.matricule).toLowerCase()}">
-          <div class="pending-info">
-            <div class="pending-name">👤 ${c.nom}</div>
-            <div class="pending-details">
-              <span>📍 Matricule: <strong>${c.matricule}</strong></span> |
-              <span>🕐 Sortie: ${extractTimeFromISO(c.heureSortie)}</span> |
-              <span>🏥 ${c.typeConsultation}</span> |
-              <span>📍 ${c.lieuConsultation}</span> |
-              <span>🌙 ${c.shift}</span>
+      // Afficher différemment selon le mode (production readonly vs admin)
+      if (userPermissions === "readonly") {
+        // MODE PRODUCTION: Affichage en lecture seule
+        pendingList.innerHTML = itemsToDisplay.map(c => `
+          <div class="pending-item pending-readonly" data-id="${c.id || c.matricule}" data-search="${(c.nom + ' ' + c.matricule).toLowerCase()}" data-fonction="${(c.fonction || '').toLowerCase()}" data-rattachement="${(c.rattachement || '').toLowerCase()}">
+            <div class="pending-info">
+              <div class="pending-name">👤 ${c.nom}</div>
+              <div class="pending-fonction">👔 Fonction: <strong>${c.fonction || '-'}</strong></div>
+              <div class="pending-details">
+                <span>📍 Matricule: <strong>${c.matricule}</strong></span> |
+                <span>🕐 Sortie: ${extractTimeFromISO(c.heureSortie)}</span> |
+                <span>🏥 ${c.typeConsultation}</span> |
+                <span>📍 ${c.lieuConsultation}</span> |
+                <span>🌙 ${c.shift}</span>
+              </div>
             </div>
           </div>
-          <div class="pending-actions">
-            <input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}">
-            <input type="time" class="time-retour" data-matricule="${c.matricule}" placeholder="Heure retour" disabled>
-            
-            <select class="select-resultat" data-matricule="${c.matricule}" disabled>
-              <option value="">-- Résultat --</option>
-              <option value="Consultation médical">Consultation médical</option>
-              <option value="Assistante maternelle">Assistante maternelle</option>
-              <option value="Repos médical">Repos médical</option>
-              <option value="anomalie">anomalie</option>
-            </select>
-            
-            <input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" placeholder="Nombre de jours" disabled style="display:none;">
-            
-            <button class="btn-confirm-retour" data-matricule="${c.matricule}" disabled>OK</button>
+        `).join("");
+      } else {
+        // MODE ADMIN: Affichage complet avec actions
+        pendingList.innerHTML = itemsToDisplay.map(c => `
+          <div class="pending-item" data-id="${c.id || c.matricule}" data-search="${(c.nom + ' ' + c.matricule).toLowerCase()}" data-fonction="${(c.fonction || '').toLowerCase()}" data-rattachement="${(c.rattachement || '').toLowerCase()}">
+            <div class="pending-info">
+              <div class="pending-name">👤 ${c.nom}</div>
+              <div class="pending-fonction">👔 Fonction: <strong>${c.fonction || '-'}</strong></div>
+              <div class="pending-details">
+                <span>📍 Matricule: <strong>${c.matricule}</strong></span> |
+                <span>🕐 Sortie: ${extractTimeFromISO(c.heureSortie)}</span> |
+                <span>🏥 ${c.typeConsultation}</span> |
+                <span>📍 ${c.lieuConsultation}</span> |
+                <span>🌙 ${c.shift}</span>
+              </div>
+            </div>
+            <div class="pending-actions">
+              <input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}">
+              <input type="time" class="time-retour" data-matricule="${c.matricule}" placeholder="Heure retour" disabled>
+              
+              <select class="select-resultat" data-matricule="${c.matricule}" disabled>
+                <option value="">-- Résultat --</option>
+                <option value="Consultation médical">Consultation médical</option>
+                <option value="Assistante maternelle">Assistante maternelle</option>
+                <option value="Repos médical">Repos médical</option>
+                <option value="anomalie">anomalie</option>
+              </select>
+              
+              <input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" placeholder="Nombre de jours" disabled style="display:none;">
+              
+              <button class="btn-confirm-retour" data-matricule="${c.matricule}" disabled>OK</button>
+            </div>
           </div>
-        </div>
-      `).join("");
+        `).join("");
+      }
 
-      // Ajouter les événements
-      attachPendingEventListeners();
+      // Ajouter les événements (seulement pour admin)
+      if (userPermissions !== "readonly") {
+        attachPendingEventListeners();
+      }
     }
 
     // Afficher la liste filtrée
     displayPendingList(filteredPending);
 
-    // ========== AJOUTER LA RECHERCHE ==========
-    const searchPending = document.getElementById("searchPending");
-    if (searchPending) {
-      searchPending.addEventListener("input", function () {
-        const searchTerm = this.value.toLowerCase();
-        
-        if (searchTerm === "") {
-          displayPendingList(allPendingItems);
-        } else {
-          const filtered = allPendingItems.filter(c => {
-            return (c.nom.toLowerCase().includes(searchTerm) || c.matricule.toLowerCase().includes(searchTerm));
-          });
-          displayPendingList(filtered);
-        }
+    // ========== APPLIER LES FILTRES ==========
+    applyPendingFilters(filteredPending, displayPendingList);
+  }
+
+  // ================= POPULATE PENDING FILTERS =================
+  function populatePendingFilters(consultations) {
+    const filterFonction = document.getElementById("filterPendingFonction");
+    const filterRattachement = document.getElementById("filterPendingRattachement");
+
+    if (!filterFonction || !filterRattachement) return;
+
+    // Récupérer les fonctions et rattachements uniques
+    const fonctions = [...new Set(consultations.map(c => c.fonction).filter(f => f))];
+    const rattachements = [...new Set(consultations.map(c => c.rattachement).filter(r => r))];
+
+    // Remplir fonction
+    filterFonction.innerHTML = '<option value="">-- Toutes les fonctions --</option>';
+    fonctions.sort().forEach(f => {
+      const opt = document.createElement("option");
+      opt.value = f.toLowerCase();
+      opt.textContent = f;
+      filterFonction.appendChild(opt);
+    });
+
+    // Remplir rattachement
+    filterRattachement.innerHTML = '<option value="">-- Tous les rattachements --</option>';
+    rattachements.sort().forEach(r => {
+      const opt = document.createElement("option");
+      opt.value = r.toLowerCase();
+      opt.textContent = r;
+      filterRattachement.appendChild(opt);
+    });
+  }
+
+  // ================= APPLY PENDING FILTERS =================
+  function applyPendingFilters(allItems, displayFunction) {
+    const searchInput = document.getElementById("searchPending");
+    const filterFonction = document.getElementById("filterPendingFonction");
+    const filterRattachement = document.getElementById("filterPendingRattachement");
+    const btnReset = document.getElementById("btnResetPendingFilters");
+
+    function filterAndDisplay() {
+      let filtered = allItems;
+
+      // Filtrer par recherche
+      const searchTerm = (searchInput?.value || "").toLowerCase();
+      if (searchTerm) {
+        filtered = filtered.filter(c => {
+          return (c.nom.toLowerCase().includes(searchTerm) || c.matricule.toLowerCase().includes(searchTerm));
+        });
+      }
+
+      // Filtrer par fonction
+      const fonctionFilter = (filterFonction?.value || "").toLowerCase();
+      if (fonctionFilter) {
+        filtered = filtered.filter(c => {
+          return (c.fonction || "").toLowerCase() === fonctionFilter;
+        });
+      }
+
+      // Filtrer par rattachement
+      const rattachementFilter = (filterRattachement?.value || "").toLowerCase();
+      if (rattachementFilter) {
+        filtered = filtered.filter(c => {
+          return (c.rattachement || "").toLowerCase() === rattachementFilter;
+        });
+      }
+
+      // Afficher les résultats
+      if (filtered.length === 0) {
+        document.getElementById("pendingList").innerHTML = '<div class="empty-pending">❌ Aucun résultat avec ces filtres</div>';
+      } else {
+        displayFunction(filtered);
+      }
+    }
+
+    // Ajouter les event listeners
+    if (searchInput) {
+      searchInput.addEventListener("input", filterAndDisplay);
+    }
+
+    if (filterFonction) {
+      filterFonction.addEventListener("change", filterAndDisplay);
+    }
+
+    if (filterRattachement) {
+      filterRattachement.addEventListener("change", filterAndDisplay);
+    }
+
+    if (btnReset) {
+      btnReset.addEventListener("click", function () {
+        if (searchInput) searchInput.value = "";
+        if (filterFonction) filterFonction.value = "";
+        if (filterRattachement) filterRattachement.value = "";
+        filterAndDisplay();
       });
     }
   }
@@ -1203,6 +1504,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
     document.querySelectorAll(".btn-confirm-retour").forEach(btn => {
       btn.addEventListener("click", async function () {
+        // Vérification de permissions: bloquer si mode production (readonly)
+        if (userPermissions === "readonly") {
+          showMessage("❌ Accès refusé: Mode production en lecture seule", "error");
+          return;
+        }
+
         const matricule = this.dataset.matricule;
         const timeInput = this.parentElement.querySelector(".time-retour");
         const selectResultat = this.parentElement.querySelector(".select-resultat");
@@ -1221,6 +1528,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const params = new URLSearchParams({
           action: "setRetour",
+          password: userPassword,
           matricule: matricule,
           heureRetour: timeInput.value,
           resultat: selectResultat.value,
@@ -1267,23 +1575,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const dashboardSubtitle = document.getElementById("dashboardSubtitle");
     if (!dashboardSubtitle) return;
 
-    // Compter le nombre de jours uniques dans les données
-    const uniqueDates = new Set();
-    allConsultations.forEach(c => {
-      const correctedDate = extractAndCorrectDate(c.date);
-      if (correctedDate !== "-") uniqueDates.add(correctedDate);
-    });
-
-    const dateCount = uniqueDates.size;
-    if (dateCount === 0) {
-      dashboardSubtitle.innerHTML = 'Vue d\'ensemble de <strong>toutes les consultations</strong>';
-    } else if (dateCount === 1) {
-      const date = Array.from(uniqueDates)[0];
-      dashboardSubtitle.innerHTML = `Vue d'ensemble de <strong>${dateCount} jour</strong> (${date})`;
-    } else {
-      const dates = Array.from(uniqueDates).sort();
-      dashboardSubtitle.innerHTML = `Vue d'ensemble de <strong>${dateCount} jours</strong> (${dates[0]} à ${dates[dates.length - 1]})`;
-    }
+    // Afficher simplement "aujourd'hui"
+    const todayISO = getTodayMadagascar();
+    dashboardSubtitle.innerHTML = `Vue d'ensemble de <strong>1 jour</strong> (${todayISO})`;
   }
 
   /**
@@ -1875,28 +2169,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Bouton Repos History (dans la zone orange)
-  if (btnReposHistory) {
-    btnReposHistory.addEventListener("click", function () {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      
-      const dateString = yesterday.toISOString().split('T')[0]; // Format YYYY-MM-DD
-      
-      filterFromDate.value = dateString;
-      filterToDate.value = dateString;
-      
-      const filtered = getFilteredConsultations();
-      displayReport(filtered);
-      
-      // Naviguer vers la section rapport
-      navBtns.forEach(b => b.classList.remove("active"));
-      document.querySelector('[data-section="rapport"]').classList.add("active");
-
-      sections.forEach(s => s.classList.remove("active"));
-      document.getElementById("rapport").classList.add("active");
-    });
-  }
-
   // Écouteurs pour les sélects des filtres
   if (filterRattachement) {
     filterRattachement.addEventListener("change", function () {
@@ -1914,6 +2186,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ================= CHECK ANOMALIES =================
   async function checkAnomaliesManually() {
+    // Vérification de permissions: bloquer si mode production (readonly)
+    if (userPermissions === "readonly") {
+      showMessage("❌ Accès refusé: Mode production en lecture seule", "error");
+      return;
+    }
+
     try {
       const btn = document.getElementById("btnCheckAnomalies");
       if (btn) {

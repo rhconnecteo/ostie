@@ -196,7 +196,6 @@
         <div class="stat-card stat-repos">
           <h3>🩺 Repos Médical</h3>
           <p id="statRepos" class="stat-value">0</p>
-          <button id="btnReposHistory" class="btn-stat-action">📊 Jour Précédent</button>
         </div>
         <div class="stat-card stat-joursrm">
           <h3>📋 Jours de Repos Médical</h3>
@@ -222,12 +221,38 @@
         </div>
       </div>
 
+      <!-- CARTES DE RATTACHEMENT (Production Dashboard) -->
+      <div id="rattachementCardsSection" class="rattachement-cards-section" style="display: none; margin-top: 40px;">
+        <h3>🏢 Statut par Rattachement</h3>
+        <div id="rattachementCards" class="rattachement-cards-grid">
+          <!-- Les cartes s'affichent ici -->
+        </div>
+      </div>
+
       <!-- PERSONNES EN ATTENTE DE RETOUR -->
       <div class="pending-section">
         <h3>⏳ Personnes en attente de retour</h3>
-        <div style="margin-bottom: 15px;">
-          <input type="text" id="searchPending" placeholder="🔍 Chercher par nom ou matricule..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
+        
+        <!-- FILTRES -->
+        <div class="pending-filters" style="margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+          <div style="flex: 1; min-width: 200px;">
+            <input type="text" id="searchPending" placeholder="🔍 Chercher par nom ou matricule..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
+          </div>
+          <div style="min-width: 180px;">
+            <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">👔 Fonction</label>
+            <select id="filterPendingFonction" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;">
+              <option value="">-- Toutes les fonctions --</option>
+            </select>
+          </div>
+          <div style="min-width: 180px;">
+            <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">🏢 Rattachement</label>
+            <select id="filterPendingRattachement" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;">
+              <option value="">-- Tous les rattachements --</option>
+            </select>
+          </div>
+          <button id="btnResetPendingFilters" class="btn-reset-pending" style="padding: 10px 15px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 13px;">↺ Réinitialiser</button>
         </div>
+        
         <div id="pendingList" class="pending-list">
           <!-- Les données s'affichent ici -->
         </div>
