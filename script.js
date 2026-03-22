@@ -129,9 +129,11 @@ document.addEventListener("DOMContentLoaded", function () {
   const heureRetourGroup = document.getElementById("heureRetourGroup");
   const heureRetourInput = document.getElementById("heureRetour");
   const casGraveCheckbox = document.getElementById("casGrave");
+  const commentairesRow = document.getElementById("commentairesRow");
   const commentairesGroup = document.getElementById("commentairesGroup");
   const commentairesInput = document.getElementById("commentaires");
   const btnSave = document.getElementById("btnSave");
+  const btnCancel = document.getElementById("btnCancel");
   const successMessage = document.getElementById("successMessage");
 
   // ================= DASHBOARD ELEMENTS =================
@@ -574,7 +576,7 @@ document.addEventListener("DOMContentLoaded", function () {
     heureRetourGroup.style.display = "none";
     heureRetourInput.value = "";
     casGraveCheckbox.checked = false;
-    commentairesGroup.style.display = "none";
+    commentairesRow.style.display = "none";
     commentairesInput.value = "";
 
     formConsultation.style.display = "block";
@@ -643,10 +645,10 @@ document.addEventListener("DOMContentLoaded", function () {
   // ================= CAS GRAVE CHECKBOX =================
   casGraveCheckbox.addEventListener("change", function () {
     if (this.checked) {
-      commentairesGroup.style.display = "block";
+      commentairesRow.style.display = "block";
       commentairesInput.disabled = false;
     } else {
-      commentairesGroup.style.display = "none";
+      commentairesRow.style.display = "none";
       commentairesInput.value = "";
       commentairesInput.disabled = true;
     }
@@ -780,7 +782,7 @@ document.addEventListener("DOMContentLoaded", function () {
     heureRetourInput.value = "";
     heureRetourInput.disabled = true;
     casGraveCheckbox.checked = false;
-    commentairesGroup.style.display = "none";
+    commentairesRow.style.display = "none";
     commentairesInput.value = "";
     commentairesInput.disabled = true;
     typeConsultationSelect.value = "";
@@ -854,6 +856,39 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
+  // ================= CANCEL CONSULTATION =================
+  btnCancel.addEventListener("click", function (e) {
+    e.preventDefault();
+    
+    // Réinitialiser la sélection du collaborateur et le formulaire
+    searchInput.value = "";
+    collaborateurSelect.value = "";
+    matriculeSpan.textContent = "-";
+    nomPrenomSpan.textContent = "-";
+    fonctionSpan.textContent = "-";
+    rattachementSpan.textContent = "-";
+    
+    dateInput.value = "";
+    heureSortieInput.value = "";
+    typeConsultationSelect.value = "";
+    lieuConsultationSelect.value = "";
+    choixSelect.value = "";
+    shiftSelect.value = "";
+    heureRetourInput.value = "";
+    heureRetourGroup.style.display = "none";
+    heureRetourInput.disabled = true;
+    retourImmediatelyCheckbox.checked = false;
+    casGraveCheckbox.checked = false;
+    commentairesRow.style.display = "none";
+    commentairesInput.value = "";
+    commentairesInput.disabled = true;
+    
+    formConsultation.style.display = "none";
+    successMessage.textContent = "";
+    
+    showMessage("🔄 Formulaire annulé", "success");
+  });
+
   function resetForm() {
     searchInput.value = "";
     collaborateurSelect.value = "";
@@ -873,7 +908,7 @@ document.addEventListener("DOMContentLoaded", function () {
     heureRetourInput.value = "";
     heureRetourInput.disabled = true;
     casGraveCheckbox.checked = false;
-    commentairesGroup.style.display = "none";
+    commentairesRow.style.display = "none";
     commentairesInput.value = "";
     commentairesInput.disabled = true;
     btnSave.disabled = false;
