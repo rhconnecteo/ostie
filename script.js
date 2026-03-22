@@ -1,6 +1,8 @@
 document.addEventListener("DOMContentLoaded", function () {
 
-  const API_URL = "https://script.google.com/macros/s/AKfycbxVDcI3GdbMkJ9WowDIsYSIPPuH2SLQO1X4DwVd4Kot2w39-6r0HkEYdWatk3lvbX6tWg/exec";
+  const API_URL = "https://script.google.com/macros/s/AKfycbyY4C2YVyBBgf-B-PkCkDXGYOVcqGi0jwdml67psZA7kszvNfFXITqBLPe9nFBjKQP1jA/exec";
+
+
 
 
   // ================= STATE =================
@@ -13,6 +15,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let allConsultations = [];
   let chartCamembert = null;
   let chartJours = null;
+  let rattachementColorMap = {}; // Mémoriser les couleurs des rattachements
 
   // ================= LOAD WAITING LIST FROM STORAGE =================
   // Créer une clé unique par utilisateur pour éviter les conflits multi-utilisateurs
@@ -125,6 +128,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const retourImmediatelyCheckbox = document.getElementById("retourImmediately");
   const heureRetourGroup = document.getElementById("heureRetourGroup");
   const heureRetourInput = document.getElementById("heureRetour");
+  const casGraveCheckbox = document.getElementById("casGrave");
+  const commentairesGroup = document.getElementById("commentairesGroup");
+  const commentairesInput = document.getElementById("commentaires");
   const btnSave = document.getElementById("btnSave");
   const successMessage = document.getElementById("successMessage");
 
@@ -179,6 +185,25 @@ document.addEventListener("DOMContentLoaded", function () {
   setInterval(rotateSlogan, 6000);
 
   // ================= HELPER FUNCTIONS =================
+  // Générer une couleur unique pour chaque rattachement
+  function getRattachementColor(rattachement) {
+    if (!rattachement || rattachement === "-") return "#f5f5f5"; // Gris clair pour vide
+    
+    if (!rattachementColorMap[rattachement]) {
+      // Générer une couleur HSL basée sur un hash du rattachement
+      let hash = 0;
+      for (let i = 0; i < rattachement.length; i++) {
+        hash = ((hash << 5) - hash) + rattachement.charCodeAt(i);
+        hash = hash & hash; // Convertir en entier 32-bit
+      }
+      const hue = Math.abs(hash) % 360;
+      const saturation = 65 + (Math.abs(hash) % 20); // 65-85%
+      const lightness = 75 + (Math.abs(hash) % 15); // 75-90%
+      rattachementColorMap[rattachement] = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    }
+    return rattachementColorMap[rattachement];
+  }
+
   // Extraire l'heure d'un format ISO (ex: "1899-12-30T15:00:00.000Z" → "15:00:00")
   function extractTimeFromISO(isoDateTime) {
     if (!isoDateTime || typeof isoDateTime !== "string") return "-";
@@ -548,6 +573,9 @@ document.addEventListener("DOMContentLoaded", function () {
     retourImmediatelyCheckbox.checked = false;
     heureRetourGroup.style.display = "none";
     heureRetourInput.value = "";
+    casGraveCheckbox.checked = false;
+    commentairesGroup.style.display = "none";
+    commentairesInput.value = "";
 
     formConsultation.style.display = "block";
     setDateTimeNow();
@@ -609,6 +637,18 @@ document.addEventListener("DOMContentLoaded", function () {
       heureRetourGroup.style.display = "none";
       heureRetourInput.value = "";
       heureRetourInput.disabled = true;
+    }
+  });
+
+  // ================= CAS GRAVE CHECKBOX =================
+  casGraveCheckbox.addEventListener("change", function () {
+    if (this.checked) {
+      commentairesGroup.style.display = "block";
+      commentairesInput.disabled = false;
+    } else {
+      commentairesGroup.style.display = "none";
+      commentairesInput.value = "";
+      commentairesInput.disabled = true;
     }
   });
 
@@ -734,6 +774,20 @@ document.addEventListener("DOMContentLoaded", function () {
     dateInput.value = todayISO;
     heureSortieInput.value = time;
 
+    // Réinitialiser les autres champs
+    retourImmediatelyCheckbox.checked = false;
+    heureRetourGroup.style.display = "none";
+    heureRetourInput.value = "";
+    heureRetourInput.disabled = true;
+    casGraveCheckbox.checked = false;
+    commentairesGroup.style.display = "none";
+    commentairesInput.value = "";
+    commentairesInput.disabled = true;
+    typeConsultationSelect.value = "";
+    lieuConsultationSelect.value = "";
+    choixSelect.value = "";
+    shiftSelect.value = "";
+
     // Retirer de la liste d'attente
     waitingPersonnes.splice(index, 1);
     saveWaitingList(); // Sauvegarder dans localStorage
@@ -771,7 +825,9 @@ document.addEventListener("DOMContentLoaded", function () {
       dateSortie: convertDateToISO(dateInput.value),
       heureSortie: heureSortieInput.value,
       heureRetour: retourImmediatelyCheckbox.checked ? heureRetourInput.value : "",
-      retourImmediatelyChecked: retourImmediatelyCheckbox.checked
+      retourImmediatelyChecked: retourImmediatelyCheckbox.checked,
+      casGrave: casGraveCheckbox.checked ? "oui" : "non",
+      commentaires: commentairesInput.value
     });
 
     try {
@@ -816,6 +872,10 @@ document.addEventListener("DOMContentLoaded", function () {
     heureRetourGroup.style.display = "none";
     heureRetourInput.value = "";
     heureRetourInput.disabled = true;
+    casGraveCheckbox.checked = false;
+    commentairesGroup.style.display = "none";
+    commentairesInput.value = "";
+    commentairesInput.disabled = true;
     btnSave.disabled = false;
     btnSave.textContent = "✓ Enregistrer";
   }
@@ -985,11 +1045,11 @@ document.addEventListener("DOMContentLoaded", function () {
             <span class="rattachement-card-stat-value">${r.total}</span>
           </div>
           <div class="rattachement-card-stat">
-            <span class="rattachement-card-stat-label">✅ Complètes:</span>
+            <span class="rattachement-card-stat-label">✅ Consultés:</span>
             <span class="rattachement-card-stat-value">${r.complete}</span>
           </div>
           <div class="rattachement-card-stat">
-            <span class="rattachement-card-stat-label">⏳ En attente:</span>
+            <span class="rattachement-card-stat-label">⏳ En attente de retour:</span>
             <span class="rattachement-card-stat-value">${r.pending}</span>
           </div>
           <div class="rattachement-card-progress">
@@ -1067,6 +1127,8 @@ document.addEventListener("DOMContentLoaded", function () {
     
     collaborators.forEach(collab => {
       const row = document.createElement("tr");
+      const rattachementColor = getRattachementColor(collab.rattachement);
+      row.style.backgroundColor = rattachementColor;
       // CORRECTION: >= 3 au lieu de > 3
       const isAlert = collab.count >= 3;
       
@@ -1077,7 +1139,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       
       row.innerHTML = `
-        <td>${collab.nom}</td>
+        <td><strong>${collab.nom}</strong></td>
         <td style="text-align: center;">
           <span style="display: inline-block; min-width: 30px; padding: 4px 8px; border-radius: 12px; ${isAlert ? 'background-color: #ef5350; color: white;' : 'background-color: #e3f2fd; color: #1976d2;'} font-weight: bold;">
             ${collab.count}
@@ -1532,7 +1594,8 @@ document.addEventListener("DOMContentLoaded", function () {
           matricule: matricule,
           heureRetour: timeInput.value,
           resultat: selectResultat.value,
-          nbJourRM: inputJours.value
+          nbJourRM: inputJours.value,
+          commentaires: ""
         });
 
         try {
@@ -1577,7 +1640,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Afficher simplement "aujourd'hui"
     const todayISO = getTodayMadagascar();
-    dashboardSubtitle.innerHTML = `Vue d'ensemble de <strong>1 jour</strong> (${todayISO})`;
+    dashboardSubtitle.innerHTML = `Vue d'ensemble des retours et consultations <strong style = "color: #ed0505;">d'aujourd'hui</strong>`;
   }
 
   /**
@@ -1635,10 +1698,12 @@ document.addEventListener("DOMContentLoaded", function () {
     reportTableBody.innerHTML = "";
 
     if (consultations.length === 0) {
-      reportTableBody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">Aucune consultation trouvée</td></tr>';
+      reportTableBody.innerHTML = '<tr><td colspan="15" style="text-align: center; padding: 20px;">Aucune consultation trouvée</td></tr>';
     } else {
       consultations.forEach(c => {
         const row = document.createElement("tr");
+        const rattachementColor = getRattachementColor(c.rattachement);
+        row.style.backgroundColor = rattachementColor;
         row.innerHTML = `
           <td>${c.matricule}</td>
           <td>${c.nom}</td>
@@ -1652,6 +1717,9 @@ document.addEventListener("DOMContentLoaded", function () {
           <td>${c.heureRetour ? extractTimeFromISO(c.heureRetour) : "-"}</td>
           <td>${c.resultat || "-"}</td>
           <td>${c.nbJourRM || "-"}</td>
+          <td>${c.anomalie || "-"}</td>
+          <td>${c.casGrave || "-"}</td>
+          <td>${c.commentaires || "-"}</td>
         `;
         reportTableBody.appendChild(row);
       });
@@ -1660,6 +1728,7 @@ document.addEventListener("DOMContentLoaded", function () {
     updateCollaboratorsTable(consultations);
     updateReportStatistics(consultations);
     updateReportCharts(consultations);
+    loadConsultationRates();
   }
 
   function updateReportStatistics(consultations) {
@@ -2089,6 +2158,106 @@ document.addEventListener("DOMContentLoaded", function () {
     const matrixFonction = document.getElementById("matrixFonction");
     if (matrixFonction) {
       matrixFonction.innerHTML = generateMatrixTable(fonctionStats);
+    }
+  }
+
+  // ================= LOAD AND DISPLAY CONSULTATION RATES =================
+  function loadConsultationRates() {
+    try {
+      // Récupérer les consultations filtrées actuelles
+      const filteredConsultations = getFilteredConsultations();
+      
+      // Obtenir tous les collaborateurs
+      const allCollabByRattachement = {};
+      allCollaborateurs.forEach(c => {
+        const rattachement = c.rattachement;
+        if (rattachement) {
+          if (!allCollabByRattachement[rattachement]) {
+            allCollabByRattachement[rattachement] = 0;
+          }
+          allCollabByRattachement[rattachement]++;
+        }
+      });
+      
+      // Calculer les personnes uniques avec consultations à partir des données filtrées
+      const personnesAvecConsultations = {};
+      filteredConsultations.forEach(c => {
+        const rattachement = c.rattachement;
+        const matricule = c.matricule;
+        if (rattachement && matricule) {
+          if (!personnesAvecConsultations[rattachement]) {
+            personnesAvecConsultations[rattachement] = new Set();
+          }
+          personnesAvecConsultations[rattachement].add(matricule);
+        }
+      });
+      
+      // Construire les données de taux
+      const rates = [];
+      for (const rattachement in allCollabByRattachement) {
+        const total = allCollabByRattachement[rattachement];
+        const personnesUniques = personnesAvecConsultations[rattachement]?.size || 0;
+        const taux = total > 0 ? Math.round((personnesUniques / total) * 100) : 0;
+        
+        rates.push({
+          rattachement: rattachement,
+          totalCollaborateurs: total,
+          personnesAvecConsultation: personnesUniques,
+          taux: taux
+        });
+      }
+      
+      // Trier par rattachement
+      rates.sort((a, b) => a.rattachement.localeCompare(b.rattachement));
+      
+      const container = document.getElementById("consultationRatesContainer");
+      
+      if (!container) {
+        console.warn("⚠️ consultationRatesContainer n'existe pas!");
+        return;
+      }
+
+      if (rates.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">Aucune donnée de taux disponible</p>';
+        return;
+      }
+
+      container.innerHTML = rates.map(rate => {
+        let percentageColor;
+        if (rate.taux >= 95) {
+          percentageColor = "critical";
+        } else if (rate.taux >= 70) {
+          percentageColor = "high";
+        } else if (rate.taux >= 30) {
+          percentageColor = "medium";
+        } else {
+          percentageColor = "low";
+        }
+        return `
+          <div class="consultation-rate-card">
+            <h5>🏢 ${rate.rattachement}</h5>
+            <p class="rate-label">Taux de consultation</p>
+            <div class="rate-percentage-display ${percentageColor}">${rate.taux}%</div>
+            <div class="rate-stats">
+              <div class="rate-stat-item">
+                <span class="rate-stat-label">Total</span>
+                <span class="rate-stat-value">${rate.totalCollaborateurs}</span>
+              </div>
+              <div class="rate-stat-item">
+                <span class="rate-stat-label">Consultation</span>
+                <span class="rate-stat-value">${rate.personnesAvecConsultation}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+    } catch (e) {
+      console.error("❌ Erreur chargement taux consultation:", e);
+      const container = document.getElementById("consultationRatesContainer");
+      if (container) {
+        container.innerHTML = '<p style="text-align: center; color: red; padding: 20px;">⚠️ Erreur lors du chargement des taux</p>';
+      }
     }
   }
 

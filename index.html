@@ -35,7 +35,7 @@
       <img src="logo.png" alt="OSTIE Logo" class="navbar-logo">
       <div class="nav-buttons">
         <button class="nav-btn active" data-section="formulaire">📋 Formulaire</button>
-        <button class="nav-btn" data-section="dashboard">📊 Dashboard</button>
+        <button class="nav-btn" data-section="dashboard">🔄 Suivi de retour</button>
         <button class="nav-btn" data-section="rapport">📅 Rapport</button>
         <button class="nav-btn logout-btn" id="logoutBtn">🚪 Déconnexion</button>
       </div>
@@ -116,6 +116,7 @@
                 <option value="Maternité / Sage-femme (CPN)">Maternité / Sage-femme (CPN)</option>
                 <option value="Spécialités médicales">Spécialités médicales</option>
                 <option value="Administratif / Rendez-vous">Administratif / Rendez-vous</option>
+                <option value="Visite d'embauche">Visite d'embauche</option>
             </select>
           </div>
           <div class="form-group">
@@ -162,6 +163,24 @@
           </div>
         </div>
 
+        <!-- Ligne 5: Cas Grave -->
+        <div class="form-row">
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">⚠️ Cas Grave?</label>
+            <div class="checkbox-wrapper">
+              <input type="checkbox" id="casGrave">
+            </div>
+          </div>
+        </div>
+
+        <!-- Commentaires (visible seulement si "Cas Grave" est coché) -->
+        <div class="form-row" id="commentairesGroup" style="display: none;">
+          <div class="form-group">
+            <label>💬 Commentaires (Cas Grave)</label>
+            <textarea id="commentaires" placeholder="Ajouter des commentaires sur ce cas grave..." rows="3" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; font-family: inherit;"></textarea>
+          </div>
+        </div>
+
         <!-- Heure Retour (caché par défaut) -->
         <div class="form-row" id="heureRetourGroup" style="display: none;">
           <div class="form-group">
@@ -180,7 +199,7 @@
   <!-- ============== DASHBOARD SECTION ============== -->
   <section id="dashboard" class="section">
     <div class="container">
-      <h2>� Suivi des Retours</h2>
+      <h2>Suivi des Retours</h2>
       <p class="section-subtitle" id="dashboardSubtitle">Vue d'ensemble des retours et consultations <strong>d'aujourd'hui</strong></p>
 
       <!-- STATISTIQUES -->
@@ -363,6 +382,15 @@
           </div>
         </div>
 
+        <!-- TAUX DE CONSULTATION PAR RATTACHEMENT -->
+        <div class="matrix-section">
+          <h4>📊 Taux de Consultation par Rattachement</h4>
+          <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Nombre de personnes qui ont eu au moins une consultation / Total de collaborateurs</p>
+          <div id="consultationRatesContainer" class="consultation-rates-grid">
+            <!-- Les cartes de taux s'affichent ici -->
+          </div>
+        </div>
+
         <!-- GRAPHIQUES RAPPORT -->
         <div class="report-charts-grid">
           <div class="chart-container">
@@ -426,6 +454,42 @@
         </div>
 
         <!-- TABLEAU RAPPORT -->
+        <style>
+          .consultation-rates-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+          }
+          .consultation-rate-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+          }
+          .consultation-rate-card h5 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            font-weight: 600;
+          }
+          .consultation-rate-card .rate-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+          }
+          .consultation-rate-card .rate-detail {
+            font-size: 13px;
+            opacity: 0.9;
+            margin: 5px 0;
+          }
+          .consultation-rate-card .rate-percentage {
+            font-size: 20px;
+            margin-top: 10px;
+            font-weight: 600;
+          }
+        </style>
         <div class="table-container">
           <table id="reportTable" class="report-table">
             <thead>
@@ -442,6 +506,9 @@
                 <th>Heure Retour</th>
                 <th>Résultat</th>
                 <th>Jours RM</th>
+                <th>Anomalie</th>
+                <th>Cas Grave</th>
+                <th>Commentaires</th>
               </tr>
             </thead>
             <tbody id="reportTableBody">
