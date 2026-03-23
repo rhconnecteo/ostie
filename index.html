@@ -279,9 +279,37 @@
       <!-- CONSULTATIONS DU JOUR (Visible pour tous) -->
       <div class="today-consultations-section" style="margin-top: 40px; padding: 20px; background: #f9f9f9; border-radius: 8px;">
         <h3>📋 Consultations d'Aujourd'hui</h3>
-        <div style="margin-bottom: 15px;">
-          <input type="text" id="searchTodayConsultations" placeholder="🔍 Chercher par nom ou matricule..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
+        
+        <!-- FILTRES CONSULTATIONS DU JOUR -->
+        <div class="today-filters" style="margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+          <div style="flex: 1; min-width: 200px;">
+            <input type="text" id="searchTodayConsultations" placeholder="🔍 Chercher par nom ou matricule..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
+          </div>
+          <div style="min-width: 180px;">
+            <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">👔 Fonction</label>
+            <select id="filterTodayFonction" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;">
+              <option value="">-- Toutes --</option>
+            </select>
+          </div>
+          <div style="min-width: 180px;">
+            <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">🏢 Rattachement</label>
+            <select id="filterTodayRattachement" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;">
+              <option value="">-- Tous --</option>
+            </select>
+          </div>
+          <div style="min-width: 180px;">
+            <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">📊 Résultat</label>
+            <select id="filterTodayResultat" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;">
+              <option value="">-- Tous --</option>
+              <option value="Repos médical">🩺 Repos Médical</option>
+              <option value="Consultation médicale">⚕️ Consultation Médicale</option>
+              <option value="Assistante maternelle">👶 Assistante Maternelle</option>
+              <option value="Day Off">📌 Day Off</option>
+            </select>
+          </div>
+          <button id="btnResetTodayFilters" class="btn-reset" style="padding: 10px 15px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 13px;">↺ Réinitialiser</button>
         </div>
+        
         <div class="table-container">
           <table id="todayConsultationsTable" class="report-table" style="width: 100%; font-size: 13px;">
             <thead>
@@ -309,124 +337,257 @@
   <!-- ============== RAPPORT SECTION ============== -->
   <section id="rapport" class="section">
     <div class="container">
-      <h2>📅 Rapport Consultations Passées</h2>
+      <h2>📅 Rapport Consultations</h2>
       <p class="section-subtitle">Analyse détaillée des consultations</p>
 
-      <div class="report-section" style="margin-top: 0; box-shadow: none; padding: 0;">
-        <div class="filter-section">
-          <div class="filter-row">
-            <div class="filter-group">
-              <label>📅 De:</label>
-              <input type="date" id="filterFromDate">
+      <!-- NAVIGATION TABS -->
+      <div class="rapport-tabs">
+        <button class="rapport-tab-btn active" data-target="rapport-consultations">Rapport</button>
+        <button class="rapport-tab-btn" data-target="rapport-taux">Taux Consultation</button>
+        <button class="rapport-tab-btn" data-target="rapport-charts">Graphiques</button>
+        <button class="rapport-tab-btn" data-target="rapport-collaborateurs">Collaborateurs</button>
+        <button class="rapport-tab-btn" data-target="rapport-synthese">Synthèses</button>
+      </div>
+
+      <div class="report-section">
+        <!-- SECTION 1: RAPPORT CONSULTATIONS PASSÉES (FILTRES & TABLE) -->
+        <div id="rapport-consultations" class="rapport-section-content active">
+          <div class="filter-section">
+            <div class="filter-row">
+              <div class="filter-group">
+                <label>📅 De:</label>
+                <input type="date" id="filterFromDate">
+              </div>
+              <div class="filter-group">
+                <label>📅 À:</label>
+                <input type="date" id="filterToDate">
+              </div>
+              <div class="filter-group">
+                <label>🏢 Rattachement:</label>
+                <select id="filterRattachement">
+                  <option value="">-- Tous --</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label>👔 Fonction:</label>
+                <select id="filterFonction">
+                  <option value="">-- Tous --</option>
+                </select>
+              </div>
+              <button id="btnFilterReport" class="btn-filter">🔍 Filtrer</button>
+              <button id="btnResetReport" class="btn-reset">↺ Réinitialiser</button>
+              <button id="btnPreviousDay" class="btn-previous">📅 Jour Précédent</button>
             </div>
-            <div class="filter-group">
-              <label>📅 À:</label>
-              <input type="date" id="filterToDate">
+          </div>
+
+          <!-- STATISTIQUES RAPPORT -->
+          <div class="report-stats-grid">
+            <div class="report-stat-card">
+              <h4>👥 Total Consultations</h4>
+              <p id="reportStatTotal" class="report-stat-value">0</p>
             </div>
-            <div class="filter-group">
-              <label>🏢 Rattachement:</label>
-              <select id="filterRattachement">
-                <option value="">-- Tous --</option>
-              </select>
+            <div class="report-stat-card">
+              <h4>🩺 Repos Médical</h4>
+              <p id="reportStatRM" class="report-stat-value">0</p>
             </div>
-            <div class="filter-group">
-              <label>👔 Fonction:</label>
-              <select id="filterFonction">
-                <option value="">-- Tous --</option>
-              </select>
+            <div class="report-stat-card">
+              <h4>⚕️ Consultation Médical</h4>
+              <p id="reportStatConsult" class="report-stat-value">0</p>
             </div>
-            <button id="btnFilterReport" class="btn-filter">🔍 Filtrer</button>
-            <button id="btnResetReport" class="btn-reset">↺ Réinitialiser</button>
-            <button id="btnPreviousDay" class="btn-previous">📅 Jour Précédent</button>
+            <div class="report-stat-card">
+              <h4>📌 Day Off</h4>
+              <p id="reportStatDayoff" class="report-stat-value">0</p>
+            </div>
+          </div>
+
+          <!-- STATISTIQUES SUPPLÉMENTAIRES -->
+          <div class="report-stats-grid">
+            <div class="report-stat-card stat-jours-rm">
+              <h4>📋 Jours Repos Médical</h4>
+              <p id="reportStatJoursRM" class="report-stat-value">0</p>
+            </div>
+            <div class="report-stat-card stat-jours-assistante">
+              <h4>👶 Jours Assistante Maternelle</h4>
+              <p id="reportStatJoursAssistante" class="report-stat-value">0</p>
+            </div>
+            <div class="report-stat-card stat-shift-nuit">
+              <h4>🌙 Collaborateurs Shift Nuit</h4>
+              <p id="reportStatShiftNuit" class="report-stat-value">0</p>
+            </div>
+            <div class="report-stat-card stat-anomalies">
+              <h4>⚠️ Anomalies</h4>
+              <p id="reportStatAnomalies" class="report-stat-value">0</p>
+            </div>
+          </div>
+
+          <!-- TABLEAU RAPPORT DÉTAILLÉ -->
+          <div class="matrix-section">
+            <h4>📋 Tableau Détaillé des Consultations</h4>
+            <div class="table-container">
+              <table id="reportTable" class="report-table">
+                <thead>
+                  <tr>
+                    <th>Matricule</th>
+                    <th>Nom</th>
+                    <th>Fonction</th>
+                    <th>Date</th>
+                    <th>Type Consultation</th>
+                    <th>Lieu</th>
+                    <th>Choix</th>
+                    <th>Shift</th>
+                    <th>Heure Sortie</th>
+                    <th>Heure Retour</th>
+                    <th>Résultat</th>
+                    <th>Jours RM</th>
+                    <th>Anomalie</th>
+                    <th>Cas Grave</th>
+                    <th>Commentaires</th>
+                  </tr>
+                </thead>
+                <tbody id="reportTableBody">
+                  <!-- Les données s'affichent ici -->
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
-        <!-- STATISTIQUES RAPPORT -->
-        <div class="report-stats-grid">
-          <div class="report-stat-card">
-            <h4>👥 Total Consultations</h4>
-            <p id="reportStatTotal" class="report-stat-value">0</p>
-          </div>
-          <div class="report-stat-card">
-            <h4>🩺 Repos Médical</h4>
-            <p id="reportStatRM" class="report-stat-value">0</p>
-          </div>
-          <div class="report-stat-card">
-            <h4>⚕️ Consultation Médical</h4>
-            <p id="reportStatConsult" class="report-stat-value">0</p>
-          </div>
-          <div class="report-stat-card">
-            <h4>📌 Day Off</h4>
-            <p id="reportStatDayoff" class="report-stat-value">0</p>
-          </div>
-        </div>
+        <!-- SECTION 2: TAUX DE CONSULTATION PAR RATTACHEMENT -->
+        <div id="rapport-taux" class="rapport-section-content" style="display: none;">
+          <h3>📊 Taux de Consultation par Rattachement</h3>
 
-        <!-- STATISTIQUES SUPPLÉMENTAIRES -->
-        <div class="report-stats-grid">
-          <div class="report-stat-card stat-jours-rm">
-            <h4>📋 Jours Repos Médical</h4>
-            <p id="reportStatJoursRM" class="report-stat-value">0</p>
+          <!-- FILTRES TAUX -->
+          <div class="filter-section" style="margin-bottom: 20px;">
+            <div class="filter-row">
+              <div class="filter-group">
+                <label>📅 De:</label>
+                <input type="date" id="filterTauxFromDate">
+              </div>
+              <div class="filter-group">
+                <label>📅 À:</label>
+                <input type="date" id="filterTauxToDate">
+              </div>
+              <div class="filter-group">
+                <label>🏢 Rattachement:</label>
+                <select id="filterTauxRattachement">
+                  <option value="">-- Tous --</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label>👔 Fonction:</label>
+                <select id="filterTauxFonction">
+                  <option value="">-- Tous --</option>
+                </select>
+              </div>
+              <button id="btnFilterTaux" class="btn-filter">🔍 Filtrer</button>
+              <button id="btnResetTaux" class="btn-reset">↺ Réinitialiser</button>
+            </div>
           </div>
-          <div class="report-stat-card stat-jours-assistante">
-            <h4>👶 Jours Assistante Maternelle</h4>
-            <p id="reportStatJoursAssistante" class="report-stat-value">0</p>
-          </div>
-          <div class="report-stat-card stat-shift-nuit">
-            <h4>🌙 Collaborateurs Shift Nuit</h4>
-            <p id="reportStatShiftNuit" class="report-stat-value">0</p>
-          </div>
-          <div class="report-stat-card stat-anomalies">
-            <h4>⚠️ Anomalies</h4>
-            <p id="reportStatAnomalies" class="report-stat-value">0</p>
-          </div>
-        </div>
 
-        <!-- TAUX DE CONSULTATION PAR RATTACHEMENT -->
-        <div class="matrix-section">
-          <h4>📊 Taux de Consultation par Rattachement</h4>
           <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Nombre de personnes qui ont eu au moins une consultation / Total de collaborateurs</p>
           <div id="consultationRatesContainer" class="consultation-rates-grid">
             <!-- Les cartes de taux s'affichent ici -->
           </div>
         </div>
 
-        <!-- GRAPHIQUES RAPPORT -->
-        <div class="report-charts-grid">
-          <div class="chart-container">
-            <h4>📊 Répartition Résultats</h4>
-            <canvas id="chartReportResultats"></canvas>
+        <!-- SECTION 3: GRAPHIQUES RAPPORT -->
+        <div id="rapport-charts" class="rapport-section-content" style="display: none;">
+          <h3>📊 Répartition Analyses</h3>
+
+          <!-- FILTRES GRAPHIQUES -->
+          <div class="filter-section" style="margin-bottom: 20px;">
+            <div class="filter-row">
+              <div class="filter-group">
+                <label>📅 De:</label>
+                <input type="date" id="filterChartsFromDate">
+              </div>
+              <div class="filter-group">
+                <label>📅 À:</label>
+                <input type="date" id="filterChartsToDate">
+              </div>
+              <div class="filter-group">
+                <label>🏢 Rattachement:</label>
+                <select id="filterChartsRattachement">
+                  <option value="">-- Tous --</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label>👔 Fonction:</label>
+                <select id="filterChartsFonction">
+                  <option value="">-- Tous --</option>
+                </select>
+              </div>
+              <button id="btnFilterCharts" class="btn-filter">🔍 Filtrer</button>
+              <button id="btnResetCharts" class="btn-reset">↺ Réinitialiser</button>
+            </div>
           </div>
-          <div class="chart-container">
-            <h4>📍 Consultations par Lieu</h4>
-            <canvas id="chartReportLieu"></canvas>
-          </div>
-          <div class="chart-container">
-            <h4>📌 Répartition Choix</h4>
-            <canvas id="chartReportChoix"></canvas>
-          </div>
-          <div class="chart-container">
-            <h4>🌙 Répartition Shift</h4>
-            <canvas id="chartReportShift"></canvas>
-          </div>
-          <div class="chart-container">
-            <h4>📉 Tendance Consultation vs RM/Assistante</h4>
-            <canvas id="chartReportTendance"></canvas>
+
+          <div class="report-charts-grid">
+            <div class="chart-container">
+              <h4>📊 Répartition Résultats</h4>
+              <canvas id="chartReportResultats"></canvas>
+            </div>
+            <div class="chart-container">
+              <h4>📍 Consultations par Lieu</h4>
+              <canvas id="chartReportLieu"></canvas>
+            </div>
+            <div class="chart-container">
+              <h4>📌 Répartition Choix</h4>
+              <canvas id="chartReportChoix"></canvas>
+            </div>
+            <div class="chart-container">
+              <h4>🌙 Répartition Shift</h4>
+              <canvas id="chartReportShift"></canvas>
+            </div>
+            <div class="chart-container">
+              <h4>📉 Tendance Consultation vs RM/Assistante</h4>
+              <canvas id="chartReportTendance"></canvas>
+            </div>
           </div>
         </div>
 
-        <!-- MATRICE RAPPORT PAR RATTACHEMENT -->
-        <div class="matrix-section">
-          <h4>👥 Consultations par Collaborateur</h4>
+        <!-- SECTION 4: CONSULTATIONS PAR COLLABORATEUR (AVEC TRI) -->
+        <div id="rapport-collaborateurs" class="rapport-section-content" style="display: none;">
+          <h3>👥 Consultations par Collaborateur</h3>
+
+          <!-- FILTRES COLLABORATEURS -->
+          <div class="filter-section" style="margin-bottom: 20px;">
+            <div class="filter-row">
+              <div class="filter-group">
+                <label>📅 De:</label>
+                <input type="date" id="filterCollabFromDate">
+              </div>
+              <div class="filter-group">
+                <label>📅 À:</label>
+                <input type="date" id="filterCollabToDate">
+              </div>
+              <div class="filter-group">
+                <label>🏢 Rattachement:</label>
+                <select id="filterCollabRattachement">
+                  <option value="">-- Tous --</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label>👔 Fonction:</label>
+                <select id="filterCollabFonction">
+                  <option value="">-- Tous --</option>
+                </select>
+              </div>
+              <button id="btnFilterCollab" class="btn-filter">🔍 Filtrer</button>
+              <button id="btnResetCollab" class="btn-reset">↺ Réinitialiser</button>
+            </div>
+          </div>
+
           <div class="table-container">
-            <table id="collaboratorsTable" class="report-table">
+            <table id="collaboratorsTable" class="report-table sortable-table">
               <thead>
                 <tr>
-                  <th>Nom</th>
-                  <th>Nombre de Consultations</th>
-                  <th>Jours de Repos Médical</th>
-                  <th>Consultations Nuit</th>
-                  <th>Fonction</th>
-                  <th>Rattachement</th>
+                  <th class="sortable">Nom</th>
+                  <th class="sortable">Nombre de Consultations</th>
+                  <th class="sortable">Jours de Repos Médical</th>
+                  <th class="sortable">Consultations Nuit</th>
+                  <th class="sortable">Fonction</th>
+                  <th class="sortable">Rattachement</th>
                 </tr>
               </thead>
               <tbody id="collaboratorsTableBody">
@@ -436,87 +597,160 @@
           </div>
         </div>
 
-        <!-- MATRICE RAPPORT PAR RATTACHEMENT -->
-        <div class="matrix-section">
-          <h4>🏢 Synthèse par Rattachement</h4>
-          <div id="matrixRattachement" class="matrix-container">
-            <!-- Tableau matriciel généré dynamiquement -->
-          </div>
-        </div>
+        <!-- SECTION 5: SYNTHÈSES -->
+        <div id="rapport-synthese" class="rapport-section-content" style="display: none;">
+          <h3>📊 Synthèses</h3>
 
-        <!-- MATRICE RAPPORT PAR FONCTION -->
-        <div class="matrix-section">
-          <h4>👔 Synthèse par Fonction</h4>
-          <div id="matrixFonction" class="matrix-container">
-            <!-- Tableau matriciel généré dynamiquement -->
+          <!-- FILTRES SYNTHÈSES -->
+          <div class="filter-section" style="margin-bottom: 20px;">
+            <div class="filter-row">
+              <div class="filter-group">
+                <label>📅 De:</label>
+                <input type="date" id="filterSyntheseFromDate">
+              </div>
+              <div class="filter-group">
+                <label>📅 À:</label>
+                <input type="date" id="filterSyntheseToDate">
+              </div>
+              <div class="filter-group">
+                <label>🏢 Rattachement:</label>
+                <select id="filterSyntheseRattachement">
+                  <option value="">-- Tous --</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label>👔 Fonction:</label>
+                <select id="filterSyntheseFonction">
+                  <option value="">-- Tous --</option>
+                </select>
+              </div>
+              <button id="btnFilterSynthese" class="btn-filter">🔍 Filtrer</button>
+              <button id="btnResetSynthese" class="btn-reset">↺ Réinitialiser</button>
+            </div>
           </div>
-        </div>
+          
+          <div class="matrix-section">
+            <h4>🏢 Synthèse par Rattachement</h4>
+            <div id="matrixRattachement" class="matrix-container">
+              <!-- Tableau matriciel généré dynamiquement -->
+            </div>
+          </div>
 
-        <!-- TABLEAU RAPPORT -->
-        <style>
-          .consultation-rates-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 15px;
-            margin-bottom: 30px;
-          }
-          .consultation-rate-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-          }
-          .consultation-rate-card h5 {
-            margin: 0 0 10px 0;
-            font-size: 16px;
-            font-weight: 600;
-          }
-          .consultation-rate-card .rate-value {
-            font-size: 24px;
-            font-weight: bold;
-            margin: 10px 0;
-          }
-          .consultation-rate-card .rate-detail {
-            font-size: 13px;
-            opacity: 0.9;
-            margin: 5px 0;
-          }
-          .consultation-rate-card .rate-percentage {
-            font-size: 20px;
-            margin-top: 10px;
-            font-weight: 600;
-          }
-        </style>
-        <div class="table-container">
-          <table id="reportTable" class="report-table">
-            <thead>
-              <tr>
-                <th>Matricule</th>
-                <th>Nom</th>
-                <th>Fonction</th>
-                <th>Date</th>
-                <th>Type Consultation</th>
-                <th>Lieu</th>
-                <th>Choix</th>
-                <th>Shift</th>
-                <th>Heure Sortie</th>
-                <th>Heure Retour</th>
-                <th>Résultat</th>
-                <th>Jours RM</th>
-                <th>Anomalie</th>
-                <th>Cas Grave</th>
-                <th>Commentaires</th>
-              </tr>
-            </thead>
-            <tbody id="reportTableBody">
-              <!-- Les données s'affichent ici -->
-            </tbody>
-          </table>
+          <div class="matrix-section">
+            <h4>👔 Synthèse par Fonction</h4>
+            <div id="matrixFonction" class="matrix-container">
+              <!-- Tableau matriciel généré dynamiquement -->
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <style>
+      .rapport-tabs {
+        display: flex;
+        gap: 10px;
+        margin: 20px 0;
+        border-bottom: 2px solid #e0e0e0;
+        overflow-x: auto;
+      }
+
+      .rapport-tab-btn {
+        padding: 12px 20px;
+        border: none;
+        background: none;
+        color: #666;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        transition: all 0.3s;
+        white-space: nowrap;
+      }
+
+      .rapport-tab-btn:hover {
+        color: #333;
+      }
+
+      .rapport-tab-btn.active {
+        color: #007bff;
+        border-bottom-color: #007bff;
+      }
+
+      .rapport-section-content {
+        display: none;
+      }
+
+      .rapport-section-content.active {
+        display: block;
+      }
+
+      .consultation-rates-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 15px;
+        margin-bottom: 30px;
+      }
+
+      .consultation-rate-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .consultation-rate-card h5 {
+        margin: 0 0 10px 0;
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .consultation-rate-card .rate-value {
+        font-size: 24px;
+        font-weight: bold;
+        margin: 10px 0;
+      }
+
+      .consultation-rate-card .rate-detail {
+        font-size: 13px;
+        opacity: 0.9;
+        margin: 5px 0;
+      }
+
+      .consultation-rate-card .rate-percentage {
+        font-size: 20px;
+        margin-top: 10px;
+        font-weight: 600;
+      }
+
+      .sortable-table th.sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+      }
+
+      .sortable-table th.sortable:hover {
+        background-color: rgba(0, 0, 0, 0.1);
+      }
+
+      .sortable-table th.sortable::after {
+        content: " ⇅";
+        font-size: 12px;
+        opacity: 0.5;
+      }
+
+      .sortable-table th.sortable.asc::after {
+        content: " ↑";
+        opacity: 1;
+      }
+
+      .sortable-table th.sortable.desc::after {
+        content: " ↓";
+        opacity: 1;
+      }
+    </style>
   </section>
 </div>
 

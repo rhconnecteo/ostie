@@ -798,6 +798,12 @@ document.addEventListener("DOMContentLoaded", function () {
     showMessage("✅ Personne sélectionnée, veuillez compléter le formulaire");
   }
 
+  // ================= COUNT TODAY CONSULTATIONS FOR MATRICULE =================
+  function countTodayConsultationsForMatricule(matricule) {
+    const todayConsultations = getTodayConsultations();
+    return todayConsultations.filter(c => c.matricule === matricule).length;
+  }
+
   // ================= SAVE CONSULTATION =================
   formConsultation.addEventListener("submit", async function (e) {
     e.preventDefault();
@@ -811,6 +817,13 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!validateForm()) return;
 
     const c = JSON.parse(collaborateurSelect.value);
+
+    // Vérifier le nombre de consultations pour ce matricule aujourd'hui
+    const countToday = countTodayConsultationsForMatricule(c.matricule);
+    if (countToday >= 1) {
+      showMessage(`⚠️ ALERTE: ${c.nom} a déjà une consultation aujourd'hui.`, "error");
+      return;
+    }
 
     const params = new URLSearchParams({
       action: "saveConsultation",
@@ -1287,9 +1300,18 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // ================= UPDATE TODAY CONSULTATIONS TABLE =================
-  function updateTodayConsultationsTable() {
-    const todayConsultations = getTodayConsultations();
-    const filteredConsultations = filterByDomain(todayConsultations);
+  function updateTodayConsultationsTable(consultations = null) {
+    let filteredConsultations;
+    
+    if (consultations) {
+      // Si des consultations sont passées en paramètre, les utiliser (déjà filtrées)
+      filteredConsultations = consultations;
+    } else {
+      // Sinon, utiliser le comportement par défaut
+      const todayConsultations = getTodayConsultations();
+      filteredConsultations = filterByDomain(todayConsultations);
+    }
+    
     const todayConsultationsBody = document.getElementById("todayConsultationsBody");
     
     if (!todayConsultationsBody) return;
@@ -1717,6 +1739,145 @@ document.addEventListener("DOMContentLoaded", function () {
       option.textContent = f;
       filterFonction.appendChild(option);
     });
+
+    // ================= REMPLIR LES FILTRES DU DASHBOARD "CONSULTATIONS D'AUJOURD'HUI" =================
+    
+    // Remplir filterTodayRattachement
+    const filterTodayRattachement = document.getElementById("filterTodayRattachement");
+    if (filterTodayRattachement) {
+      filterTodayRattachement.innerHTML = '<option value="">-- Tous les rattachements --</option>';
+      sortedRattachements.forEach(r => {
+        const option = document.createElement("option");
+        option.value = r;
+        option.textContent = r;
+        filterTodayRattachement.appendChild(option);
+      });
+    }
+
+    // Remplir filterTodayFonction
+    const filterTodayFonction = document.getElementById("filterTodayFonction");
+    if (filterTodayFonction) {
+      filterTodayFonction.innerHTML = '<option value="">-- Toutes les fonctions --</option>';
+      sortedFonctions.forEach(f => {
+        const option = document.createElement("option");
+        option.value = f;
+        option.textContent = f;
+        filterTodayFonction.appendChild(option);
+      });
+    }
+
+    // Remplir filterTodayResultat avec les résultats uniques
+    const filterTodayResultat = document.getElementById("filterTodayResultat");
+    if (filterTodayResultat) {
+      const resultats = new Set();
+      filteredConsultations.forEach(c => {
+        if (c.resultat && c.resultat !== "-") {
+          resultats.add(c.resultat);
+        }
+      });
+      
+      filterTodayResultat.innerHTML = '<option value="">-- Tous les résultats --</option>';
+      Array.from(resultats).sort().forEach(r => {
+        const option = document.createElement("option");
+        option.value = r;
+        option.textContent = r;
+        filterTodayResultat.appendChild(option);
+      });
+    }
+
+    // ================= REMPLIR LES FILTRES DES AUTRES SECTIONS RAPPORT =================
+    
+    // Remplir les selects pour TAUX
+    const filterTauxRattachement = document.getElementById("filterTauxRattachement");
+    if (filterTauxRattachement) {
+      filterTauxRattachement.innerHTML = '<option value="">-- Tous --</option>';
+      sortedRattachements.forEach(r => {
+        const option = document.createElement("option");
+        option.value = r;
+        option.textContent = r;
+        filterTauxRattachement.appendChild(option);
+      });
+    }
+
+    const filterTauxFonction = document.getElementById("filterTauxFonction");
+    if (filterTauxFonction) {
+      filterTauxFonction.innerHTML = '<option value="">-- Tous --</option>';
+      sortedFonctions.forEach(f => {
+        const option = document.createElement("option");
+        option.value = f;
+        option.textContent = f;
+        filterTauxFonction.appendChild(option);
+      });
+    }
+
+    // Remplir les selects pour GRAPHIQUES
+    const filterChartsRattachement = document.getElementById("filterChartsRattachement");
+    if (filterChartsRattachement) {
+      filterChartsRattachement.innerHTML = '<option value="">-- Tous --</option>';
+      sortedRattachements.forEach(r => {
+        const option = document.createElement("option");
+        option.value = r;
+        option.textContent = r;
+        filterChartsRattachement.appendChild(option);
+      });
+    }
+
+    const filterChartsFonction = document.getElementById("filterChartsFonction");
+    if (filterChartsFonction) {
+      filterChartsFonction.innerHTML = '<option value="">-- Tous --</option>';
+      sortedFonctions.forEach(f => {
+        const option = document.createElement("option");
+        option.value = f;
+        option.textContent = f;
+        filterChartsFonction.appendChild(option);
+      });
+    }
+
+    // Remplir les selects pour COLLABORATEURS
+    const filterCollabRattachement = document.getElementById("filterCollabRattachement");
+    if (filterCollabRattachement) {
+      filterCollabRattachement.innerHTML = '<option value="">-- Tous --</option>';
+      sortedRattachements.forEach(r => {
+        const option = document.createElement("option");
+        option.value = r;
+        option.textContent = r;
+        filterCollabRattachement.appendChild(option);
+      });
+    }
+
+    const filterCollabFonction = document.getElementById("filterCollabFonction");
+    if (filterCollabFonction) {
+      filterCollabFonction.innerHTML = '<option value="">-- Tous --</option>';
+      sortedFonctions.forEach(f => {
+        const option = document.createElement("option");
+        option.value = f;
+        option.textContent = f;
+        filterCollabFonction.appendChild(option);
+      });
+    }
+
+    // Remplir les selects pour SYNTHÈSES
+    const filterSyntheseRattachement = document.getElementById("filterSyntheseRattachement");
+    if (filterSyntheseRattachement) {
+      filterSyntheseRattachement.innerHTML = '<option value="">-- Tous --</option>';
+      sortedRattachements.forEach(r => {
+        const option = document.createElement("option");
+        option.value = r;
+        option.textContent = r;
+        filterSyntheseRattachement.appendChild(option);
+      });
+    }
+
+    const filterSyntheseFonction = document.getElementById("filterSyntheseFonction");
+    if (filterSyntheseFonction) {
+      filterSyntheseFonction.innerHTML = '<option value="">-- Tous --</option>';
+      sortedFonctions.forEach(f => {
+        const option = document.createElement("option");
+        option.value = f;
+        option.textContent = f;
+        filterSyntheseFonction.appendChild(option);
+      });
+    }
   }
 
   // ================= UPDATE DASHBOARD INFO INDICATORS =================
@@ -2197,10 +2358,10 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // ================= LOAD AND DISPLAY CONSULTATION RATES =================
-  function loadConsultationRates() {
+  function loadConsultationRates(consultations = null) {
     try {
       // Récupérer les consultations filtrées actuelles
-      const filteredConsultations = getFilteredConsultations();
+      const filteredConsultations = consultations || getFilteredConsultations();
       
       // Obtenir tous les collaborateurs
       const allCollabByRattachement = {};
@@ -2331,6 +2492,88 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // ================= RAPPORT TABS NAVIGATION =================
+  const rapportTabBtns = document.querySelectorAll(".rapport-tab-btn");
+  const rapportSections = document.querySelectorAll(".rapport-section-content");
+
+  rapportTabBtns.forEach(btn => {
+    btn.addEventListener("click", function () {
+      const targetId = this.getAttribute("data-target");
+
+      // Désactiver tous les boutons et sections
+      rapportTabBtns.forEach(b => b.classList.remove("active"));
+      rapportSections.forEach(s => {
+        s.classList.remove("active");
+        s.style.display = "none";
+      });
+
+      // Activer le bouton et la section cliqués
+      this.classList.add("active");
+      const targetSection = document.getElementById(targetId);
+      if (targetSection) {
+        targetSection.classList.add("active");
+        targetSection.style.display = "block";
+      }
+    });
+  });
+
+  // ================= SORT TABLE FUNCTION =================
+  function sortTableByColumn(table, columnIndex, ascending = true) {
+    const tbody = table.querySelector("tbody");
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+
+    rows.sort((a, b) => {
+      const cellA = a.querySelectorAll("td")[columnIndex]?.textContent.trim() || "";
+      const cellB = b.querySelectorAll("td")[columnIndex]?.textContent.trim() || "";
+
+      // Essayer de trier comme nombres si possible
+      const numA = parseFloat(cellA);
+      const numB = parseFloat(cellB);
+
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return ascending ? numA - numB : numB - numA;
+      }
+
+      // Sinon, trier comme texte
+      return ascending ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+    });
+
+    // Réinsérer les lignes triées
+    rows.forEach(row => tbody.appendChild(row));
+  }
+
+  // ================= SETUP SORTABLE TABLE HEADERS =================
+  const collaboratorsTable = document.getElementById("collaboratorsTable");
+  if (collaboratorsTable) {
+    const headers = collaboratorsTable.querySelectorAll("th.sortable");
+    let currentSort = { column: -1, ascending: true };
+
+    headers.forEach((header, index) => {
+      header.addEventListener("click", function () {
+        // Réinitialiser les autres headers
+        headers.forEach(h => h.classList.remove("asc", "desc"));
+
+        // Basculer l'ordre si on clique sur la même colonne
+        if (currentSort.column === index) {
+          currentSort.ascending = !currentSort.ascending;
+        } else {
+          currentSort.column = index;
+          currentSort.ascending = true;
+        }
+
+        // Ajouter la classe pour l'indicateur visuel
+        if (currentSort.ascending) {
+          header.classList.add("asc");
+        } else {
+          header.classList.add("desc");
+        }
+
+        // Trier le tableau
+        sortTableByColumn(collaboratorsTable, index, currentSort.ascending);
+      });
+    });
+  }
+
   // Event listeners pour le rapport
   if (btnFilterReport) {
     btnFilterReport.addEventListener("click", function () {
@@ -2385,6 +2628,296 @@ document.addEventListener("DOMContentLoaded", function () {
     filterFonction.addEventListener("change", function () {
       const filtered = getFilteredConsultations();
       displayReport(filtered);
+    });
+  }
+
+  // ================= FILTRES CONSULTATIONS D'AUJOURD'HUI (DASHBOARD) =================
+  const filterTodayFonction = document.getElementById("filterTodayFonction");
+  const filterTodayRattachement = document.getElementById("filterTodayRattachement");
+  const filterTodayResultat = document.getElementById("filterTodayResultat");
+  const btnResetTodayFilters = document.getElementById("btnResetTodayFilters");
+
+  function applyTodayConsultationsFilters() {
+    const todayConsultations = getTodayConsultations();
+    const filtered = filterByDomain(todayConsultations);
+    
+    const selectedFonction = filterTodayFonction?.value || "";
+    const selectedRattachement = filterTodayRattachement?.value || "";
+    const selectedResultat = filterTodayResultat?.value || "";
+    
+    const result = filtered.filter(c => {
+      if (selectedFonction && c.fonction !== selectedFonction) return false;
+      if (selectedRattachement && c.rattachement !== selectedRattachement) return false;
+      if (selectedResultat && c.resultat !== selectedResultat) return false;
+      return true;
+    });
+    
+    updateTodayConsultationsTable(result);
+  }
+
+  if (filterTodayFonction) {
+    filterTodayFonction.addEventListener("change", applyTodayConsultationsFilters);
+  }
+  if (filterTodayRattachement) {
+    filterTodayRattachement.addEventListener("change", applyTodayConsultationsFilters);
+  }
+  if (filterTodayResultat) {
+    filterTodayResultat.addEventListener("change", applyTodayConsultationsFilters);
+  }
+  if (btnResetTodayFilters) {
+    btnResetTodayFilters.addEventListener("click", function() {
+      filterTodayFonction.value = "";
+      filterTodayRattachement.value = "";
+      filterTodayResultat.value = "";
+      applyTodayConsultationsFilters();
+    });
+  }
+
+  // ================= FILTRES AUTRES SECTIONS RAPPORT =================
+  // Ces filtres sont traités dynamiquement lors du clic sur Filter
+  const btnFilterTaux = document.getElementById("btnFilterTaux");
+  const btnResetTaux = document.getElementById("btnResetTaux");
+  const btnFilterCharts = document.getElementById("btnFilterCharts");
+  const btnResetCharts = document.getElementById("btnResetCharts");
+  const btnFilterCollab = document.getElementById("btnFilterCollab");
+  const btnResetCollab = document.getElementById("btnResetCollab");
+  const btnFilterSynthese = document.getElementById("btnFilterSynthese");
+  const btnResetSynthese = document.getElementById("btnResetSynthese");
+
+  // Filtres TAU
+  if (btnFilterTaux) {
+    btnFilterTaux.addEventListener("click", function() {
+      const fromDate = document.getElementById("filterTauxFromDate")?.value || "";
+      const toDate = document.getElementById("filterTauxToDate")?.value || "";
+      const rattachement = document.getElementById("filterTauxRattachement")?.value || "";
+      const fonction = document.getElementById("filterTauxFonction")?.value || "";
+      
+      let filtered = allConsultations;
+      if (fromDate) {
+        filtered = filtered.filter(c => {
+          const cDate = extractAndCorrectDate(c.date);
+          return cDate >= fromDate;
+        });
+      }
+      if (toDate) {
+        filtered = filtered.filter(c => {
+          const cDate = extractAndCorrectDate(c.date);
+          return cDate <= toDate;
+        });
+      }
+      if (rattachement) {
+        filtered = filtered.filter(c => c.rattachement === rattachement);
+      }
+      if (fonction) {
+        filtered = filtered.filter(c => c.fonction === fonction);
+      }
+      
+      loadConsultationRates(filtered);
+    });
+  }
+
+  if (btnResetTaux) {
+    btnResetTaux.addEventListener("click", function() {
+      document.getElementById("filterTauxFromDate").value = "";
+      document.getElementById("filterTauxToDate").value = "";
+      document.getElementById("filterTauxRattachement").value = "";
+      document.getElementById("filterTauxFonction").value = "";
+      loadConsultationRates(allConsultations);
+    });
+  }
+
+  // Filtres GRAPHIQUES
+  if (btnFilterCharts) {
+    btnFilterCharts.addEventListener("click", function() {
+      const fromDate = document.getElementById("filterChartsFromDate")?.value || "";
+      const toDate = document.getElementById("filterChartsToDate")?.value || "";
+      const rattachement = document.getElementById("filterChartsRattachement")?.value || "";
+      const fonction = document.getElementById("filterChartsFonction")?.value || "";
+      
+      let filtered = allConsultations;
+      if (fromDate) {
+        filtered = filtered.filter(c => {
+          const cDate = extractAndCorrectDate(c.date);
+          return cDate >= fromDate;
+        });
+      }
+      if (toDate) {
+        filtered = filtered.filter(c => {
+          const cDate = extractAndCorrectDate(c.date);
+          return cDate <= toDate;
+        });
+      }
+      if (rattachement) {
+        filtered = filtered.filter(c => c.rattachement === rattachement);
+      }
+      if (fonction) {
+        filtered = filtered.filter(c => c.fonction === fonction);
+      }
+      
+      updateReportCharts(filtered);
+    });
+  }
+
+  if (btnResetCharts) {
+    btnResetCharts.addEventListener("click", function() {
+      document.getElementById("filterChartsFromDate").value = "";
+      document.getElementById("filterChartsToDate").value = "";
+      document.getElementById("filterChartsRattachement").value = "";
+      document.getElementById("filterChartsFonction").value = "";
+      updateReportCharts(allConsultations);
+    });
+  }
+
+  // Filtres COLLABORATEURS
+  if (btnFilterCollab) {
+    btnFilterCollab.addEventListener("click", function() {
+      const fromDate = document.getElementById("filterCollabFromDate")?.value || "";
+      const toDate = document.getElementById("filterCollabToDate")?.value || "";
+      const rattachement = document.getElementById("filterCollabRattachement")?.value || "";
+      const fonction = document.getElementById("filterCollabFonction")?.value || "";
+      
+      let filtered = allConsultations;
+      if (fromDate) {
+        filtered = filtered.filter(c => {
+          const cDate = extractAndCorrectDate(c.date);
+          return cDate >= fromDate;
+        });
+      }
+      if (toDate) {
+        filtered = filtered.filter(c => {
+          const cDate = extractAndCorrectDate(c.date);
+          return cDate <= toDate;
+        });
+      }
+      if (rattachement) {
+        filtered = filtered.filter(c => c.rattachement === rattachement);
+      }
+      if (fonction) {
+        filtered = filtered.filter(c => c.fonction === fonction);
+      }
+      
+      updateCollaboratorsTable(filtered);
+    });
+  }
+
+  if (btnResetCollab) {
+    btnResetCollab.addEventListener("click", function() {
+      document.getElementById("filterCollabFromDate").value = "";
+      document.getElementById("filterCollabToDate").value = "";
+      document.getElementById("filterCollabRattachement").value = "";
+      document.getElementById("filterCollabFonction").value = "";
+      updateCollaboratorsTable(allConsultations);
+    });
+  }
+
+  // Filtres SYNTHÈSES
+  if (btnFilterSynthese) {
+    btnFilterSynthese.addEventListener("click", function() {
+      const fromDate = document.getElementById("filterSyntheseFromDate")?.value || "";
+      const toDate = document.getElementById("filterSyntheseToDate")?.value || "";
+      const rattachement = document.getElementById("filterSyntheseRattachement")?.value || "";
+      const fonction = document.getElementById("filterSyntheseFonction")?.value || "";
+      
+      let filtered = allConsultations;
+      if (fromDate) {
+        filtered = filtered.filter(c => {
+          const cDate = extractAndCorrectDate(c.date);
+          return cDate >= fromDate;
+        });
+      }
+      if (toDate) {
+        filtered = filtered.filter(c => {
+          const cDate = extractAndCorrectDate(c.date);
+          return cDate <= toDate;
+        });
+      }
+      if (rattachement) {
+        filtered = filtered.filter(c => c.rattachement === rattachement);
+      }
+      if (fonction) {
+        filtered = filtered.filter(c => c.fonction === fonction);
+      }
+      
+      // Générer les matrices synthèses
+      const rattachementStats = {};
+      const fonctionStats = {};
+      
+      filtered.forEach(c => {
+        // Stats par rattachement
+        if (!rattachementStats[c.rattachement]) {
+          rattachementStats[c.rattachement] = { consultation: 0, rm: 0, assistante: 0 };
+        }
+        if (c.resultat === "Consultation médical") {
+          rattachementStats[c.rattachement].consultation++;
+        } else if (c.resultat === "Repos médical") {
+          rattachementStats[c.rattachement].rm++;
+        } else if (c.resultat === "Assistante maternelle") {
+          rattachementStats[c.rattachement].assistante++;
+        }
+        
+        // Stats par fonction
+        if (!fonctionStats[c.fonction]) {
+          fonctionStats[c.fonction] = { consultation: 0, rm: 0, assistante: 0 };
+        }
+        if (c.resultat === "Consultation médical") {
+          fonctionStats[c.fonction].consultation++;
+        } else if (c.resultat === "Repos médical") {
+          fonctionStats[c.fonction].rm++;
+        } else if (c.resultat === "Assistante maternelle") {
+          fonctionStats[c.fonction].assistante++;
+        }
+      });
+      
+      const matrixRattachement = document.getElementById("matrixRattachement");
+      const matrixFonction = document.getElementById("matrixFonction");
+      
+      if (matrixRattachement) matrixRattachement.innerHTML = generateMatrixTable(rattachementStats);
+      if (matrixFonction) matrixFonction.innerHTML = generateMatrixTable(fonctionStats);
+    });
+  }
+
+  if (btnResetSynthese) {
+    btnResetSynthese.addEventListener("click", function() {
+      document.getElementById("filterSyntheseFromDate").value = "";
+      document.getElementById("filterSyntheseToDate").value = "";
+      document.getElementById("filterSyntheseRattachement").value = "";
+      document.getElementById("filterSyntheseFonction").value = "";
+      
+      // Générer les matrices synthèses avec toutes les données
+      const rattachementStats = {};
+      const fonctionStats = {};
+      
+      allConsultations.forEach(c => {
+        // Stats par rattachement
+        if (!rattachementStats[c.rattachement]) {
+          rattachementStats[c.rattachement] = { consultation: 0, rm: 0, assistante: 0 };
+        }
+        if (c.resultat === "Consultation médical") {
+          rattachementStats[c.rattachement].consultation++;
+        } else if (c.resultat === "Repos médical") {
+          rattachementStats[c.rattachement].rm++;
+        } else if (c.resultat === "Assistante maternelle") {
+          rattachementStats[c.rattachement].assistante++;
+        }
+        
+        // Stats par fonction
+        if (!fonctionStats[c.fonction]) {
+          fonctionStats[c.fonction] = { consultation: 0, rm: 0, assistante: 0 };
+        }
+        if (c.resultat === "Consultation médical") {
+          fonctionStats[c.fonction].consultation++;
+        } else if (c.resultat === "Repos médical") {
+          fonctionStats[c.fonction].rm++;
+        } else if (c.resultat === "Assistante maternelle") {
+          fonctionStats[c.fonction].assistante++;
+        }
+      });
+      
+      const matrixRattachement = document.getElementById("matrixRattachement");
+      const matrixFonction = document.getElementById("matrixFonction");
+      
+      if (matrixRattachement) matrixRattachement.innerHTML = generateMatrixTable(rattachementStats);
+      if (matrixFonction) matrixFonction.innerHTML = generateMatrixTable(fonctionStats);
     });
   }
 
