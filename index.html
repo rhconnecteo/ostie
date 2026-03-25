@@ -15,7 +15,7 @@
     <div class="login-box">
       <h1>🏥 OSTIE</h1>
       <p class="tagline">Gestion des Consultations Médicales</p>
-      <p class="motivation">💪 Votre santé, notre priorité absolue !</p>
+      <p class="motivation">Votre santé, notre priorité absolue !</p>
 
       <form id="loginForm">
         <input type="text" id="username" placeholder="Identifiant" required>
@@ -250,29 +250,85 @@
       <!-- PERSONNES EN ATTENTE DE RETOUR -->
       <div class="pending-section">
         <h3>⏳ Personnes en attente de retour</h3>
-        
-        <!-- FILTRES -->
-        <div class="pending-filters" style="margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
-          <div style="flex: 1; min-width: 200px;">
-            <input type="text" id="searchPending" placeholder="🔍 Chercher par nom ou matricule..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
-          </div>
-          <div style="min-width: 180px;">
-            <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">👔 Fonction</label>
-            <select id="filterPendingFonction" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;">
-              <option value="">-- Toutes les fonctions --</option>
-            </select>
-          </div>
-          <div style="min-width: 180px;">
-            <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">🏢 Rattachement</label>
-            <select id="filterPendingRattachement" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; cursor: pointer;">
-              <option value="">-- Tous les rattachements --</option>
-            </select>
-          </div>
-          <button id="btnResetPendingFilters" class="btn-reset-pending" style="padding: 10px 15px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 13px;">↺ Réinitialiser</button>
+
+        <!-- TABLE 1 : EN ATTENTE DE RETOUR -->
+        <h4 style="margin-top: 30px; margin-bottom: 15px; color: #333;">⏳ En attente de retour</h4>
+        <div class="table-container" style="width: 100%; overflow-x: auto;">
+          <table id="pendingWaitingTable" class="pending-table">
+            <thead>
+              <tr>
+                <th class="sortable-header" data-col="0" data-table="waiting" style="cursor: pointer; user-select: none;">Matricule <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="1" data-table="waiting" style="cursor: pointer; user-select: none;">Nom & Prénom <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="2" data-table="waiting" style="cursor: pointer; user-select: none;">Fonction <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="3" data-table="waiting" style="cursor: pointer; user-select: none;">Type Consultation <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="4" data-table="waiting" style="cursor: pointer; user-select: none;">Lieu <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="5" data-table="waiting" style="cursor: pointer; user-select: none;">Shift <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="6" data-table="waiting" style="cursor: pointer; user-select: none;">Choix <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="7" data-table="waiting" style="cursor: pointer; user-select: none;">Date <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="8" data-table="waiting" style="cursor: pointer; user-select: none;">Heure Sortie <span class="sort-arrow">⬆️</span></th>
+                <th>Retour?</th>
+                <th>Heure Retour</th>
+                <th>Résultat</th>
+                <th>Jours RM</th>
+                <th>Valider</th>
+              </tr>
+              <tr class="table-filter-row">
+                <th><input type="text" class="filter-waiting-col" data-col="0" placeholder="🔍"></th>
+                <th><input type="text" class="filter-waiting-col" data-col="1" placeholder="🔍"></th>
+                <th><input type="text" class="filter-waiting-col" data-col="2" placeholder="🔍"></th>
+                <th><input type="text" class="filter-waiting-col" data-col="3" placeholder="🔍"></th>
+                <th><input type="text" class="filter-waiting-col" data-col="4" placeholder="🔍"></th>
+                <th><select class="filter-waiting-col" data-col="5"><option value="">☐</option><option value="Jour">Jour</option><option value="Nuit">Nuit</option></select></th>
+                <th><select class="filter-waiting-col" data-col="6"><option value="">☐</option><option value="Day off">Day off</option><option value="En poste">En poste</option></select></th>
+                <th><input type="date" class="filter-waiting-col" data-col="7"></th>
+                <th><input type="text" class="filter-waiting-col" data-col="8" placeholder="🔍"></th>
+                <th colspan="5" style="text-align: center; background: #ffeaa7; font-weight: 600; font-size: 10px;">⚙️ Actions</th>
+              </tr>
+            </thead>
+            <tbody id="pendingWaitingTableBody">
+              <!-- Les données s'affichent ici -->
+            </tbody>
+          </table>
         </div>
-        
-        <div id="pendingList" class="pending-list">
-          <!-- Les données s'affichent ici -->
+
+        <!-- TABLE 2 : DÉJÀ RETOURNÉE -->
+        <h4 style="margin-top: 30px; margin-bottom: 15px; color: #333;">✅ Déjà retournée</h4>
+        <div class="table-container" style="width: 100%; overflow-x: auto;">
+          <table id="pendingCompletedTable" class="pending-table">
+            <thead>
+              <tr>
+                <th class="sortable-header" data-col="0" data-table="completed" style="cursor: pointer; user-select: none;">Matricule <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="1" data-table="completed" style="cursor: pointer; user-select: none;">Nom & Prénom <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="2" data-table="completed" style="cursor: pointer; user-select: none;">Fonction <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="3" data-table="completed" style="cursor: pointer; user-select: none;">Type Consultation <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="4" data-table="completed" style="cursor: pointer; user-select: none;">Lieu <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="5" data-table="completed" style="cursor: pointer; user-select: none;">Shift <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="6" data-table="completed" style="cursor: pointer; user-select: none;">Choix <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="7" data-table="completed" style="cursor: pointer; user-select: none;">Date <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="8" data-table="completed" style="cursor: pointer; user-select: none;">Heure Sortie <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="9" data-table="completed" style="cursor: pointer; user-select: none;">Heure Retour <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="10" data-table="completed" style="cursor: pointer; user-select: none;">Résultat <span class="sort-arrow">⬆️</span></th>
+                <th class="sortable-header" data-col="11" data-table="completed" style="cursor: pointer; user-select: none;">Jours RM <span class="sort-arrow">⬆️</span></th>
+              </tr>
+              <tr class="table-filter-row">
+                <th><input type="text" class="filter-completed-col" data-col="0" placeholder="🔍"></th>
+                <th><input type="text" class="filter-completed-col" data-col="1" placeholder="🔍"></th>
+                <th><input type="text" class="filter-completed-col" data-col="2" placeholder="🔍"></th>
+                <th><input type="text" class="filter-completed-col" data-col="3" placeholder="🔍"></th>
+                <th><input type="text" class="filter-completed-col" data-col="4" placeholder="🔍"></th>
+                <th><select class="filter-completed-col" data-col="5"><option value="">☐</option><option value="Jour">Jour</option><option value="Nuit">Nuit</option></select></th>
+                <th><select class="filter-completed-col" data-col="6"><option value="">☐</option><option value="Day off">Day off</option><option value="En poste">En poste</option></select></th>
+                <th><input type="date" class="filter-completed-col" data-col="7"></th>
+                <th><input type="text" class="filter-completed-col" data-col="8" placeholder="🔍"></th>
+                <th><input type="text" class="filter-completed-col" data-col="9" placeholder="🔍"></th>
+                <th><input type="text" class="filter-completed-col" data-col="10" placeholder="🔍"></th>
+                <th><input type="text" class="filter-completed-col" data-col="11" placeholder="🔍"></th>
+              </tr>
+            </thead>
+            <tbody id="pendingCompletedTableBody">
+              <!-- Les données s'affichent ici -->
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -428,20 +484,31 @@
                 <thead>
                   <tr>
                     <th>Matricule</th>
-                    <th>Nom</th>
+                    <th>Nom & Prénom</th>
                     <th>Fonction</th>
-                    <th>Date</th>
                     <th>Type Consultation</th>
                     <th>Lieu</th>
-                    <th>Choix</th>
                     <th>Shift</th>
+                    <th>Choix</th>
+                    <th>Date</th>
                     <th>Heure Sortie</th>
                     <th>Heure Retour</th>
                     <th>Résultat</th>
                     <th>Jours RM</th>
-                    <th>Anomalie</th>
-                    <th>Cas Grave</th>
-                    <th>Commentaires</th>
+                  </tr>
+                  <tr class="table-filter-row">
+                    <th><input type="text" class="filter-col" data-col="0" placeholder="🔍 Matr."></th>
+                    <th><input type="text" class="filter-col" data-col="1" placeholder="🔍 Nom"></th>
+                    <th><input type="text" class="filter-col" data-col="2" placeholder="🔍 Fonction"></th>
+                    <th><input type="text" class="filter-col" data-col="3" placeholder="🔍 Type"></th>
+                    <th><input type="text" class="filter-col" data-col="4" placeholder="🔍 Lieu"></th>
+                    <th><select class="filter-col" data-col="5"><option value="">Shift</option><option value="Jour">Jour</option><option value="Nuit">Nuit</option></select></th>
+                    <th><select class="filter-col" data-col="6"><option value="">Choix</option><option value="Day off">Day off</option><option value="En poste">En poste</option></select></th>
+                    <th><input type="date" class="filter-col" data-col="7" placeholder="Date"></th>
+                    <th><input type="text" class="filter-col" data-col="8" placeholder="🔍 H. Sortie"></th>
+                    <th><input type="text" class="filter-col" data-col="9" placeholder="🔍 H. Retour"></th>
+                    <th><select class="filter-col" data-col="10"><option value="">Résult.</option><option value="Consultation médical">Consult.</option><option value="Repos médical">Repos</option><option value="Assistante maternelle">Assist.</option></select></th>
+                    <th><input type="number" class="filter-col" data-col="11" placeholder="🔍 Jours" min="0" step="0.5"></th>
                   </tr>
                 </thead>
                 <tbody id="reportTableBody">
@@ -582,12 +649,20 @@
             <table id="collaboratorsTable" class="report-table sortable-table">
               <thead>
                 <tr>
-                  <th class="sortable">Nom</th>
-                  <th class="sortable">Nombre de Consultations</th>
-                  <th class="sortable">Jours de Repos Médical</th>
-                  <th class="sortable">Consultations Nuit</th>
-                  <th class="sortable">Fonction</th>
-                  <th class="sortable">Rattachement</th>
+                  <th class="sortable-header" data-col="0" data-table="collaborators" style="cursor: pointer; user-select: none;">Nom <span class="sort-arrow">⬆️</span></th>
+                  <th class="sortable-header" data-col="1" data-table="collaborators" style="cursor: pointer; user-select: none;">Nb Consultations <span class="sort-arrow">⬆️</span></th>
+                  <th class="sortable-header" data-col="2" data-table="collaborators" style="cursor: pointer; user-select: none;">Jours RM <span class="sort-arrow">⬆️</span></th>
+                  <th class="sortable-header" data-col="3" data-table="collaborators" style="cursor: pointer; user-select: none;">Consultations Nuit <span class="sort-arrow">⬆️</span></th>
+                  <th class="sortable-header" data-col="4" data-table="collaborators" style="cursor: pointer; user-select: none;">Fonction <span class="sort-arrow">⬆️</span></th>
+                  <th class="sortable-header" data-col="5" data-table="collaborators" style="cursor: pointer; user-select: none;">Rattachement <span class="sort-arrow">⬆️</span></th>
+                </tr>
+                <tr class="table-filter-row">
+                  <th><input type="text" class="filter-collaborators-col" data-col="0" placeholder="🔍"></th>
+                  <th><input type="text" class="filter-collaborators-col" data-col="1" placeholder="🔍"></th>
+                  <th><input type="text" class="filter-collaborators-col" data-col="2" placeholder="🔍"></th>
+                  <th><input type="text" class="filter-collaborators-col" data-col="3" placeholder="🔍"></th>
+                  <th><input type="text" class="filter-collaborators-col" data-col="4" placeholder="🔍"></th>
+                  <th><input type="text" class="filter-collaborators-col" data-col="5" placeholder="🔍"></th>
                 </tr>
               </thead>
               <tbody id="collaboratorsTableBody">

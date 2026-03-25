@@ -790,6 +790,9 @@ document.addEventListener("DOMContentLoaded", function () {
     choixSelect.value = "";
     shiftSelect.value = "";
 
+    // ✅ AFFICHER LE FORMULAIRE
+    formConsultation.style.display = "block";
+
     // Retirer de la liste d'attente
     waitingPersonnes.splice(index, 1);
     saveWaitingList(); // Sauvegarder dans localStorage
@@ -1175,24 +1178,19 @@ document.addEventListener("DOMContentLoaded", function () {
     
     collaborators.forEach(collab => {
       const row = document.createElement("tr");
-      const rattachementColor = getRattachementColor(collab.rattachement);
-      row.style.backgroundColor = rattachementColor;
-      // CORRECTION: >= 3 au lieu de > 3
-      const isAlert = collab.count >= 3;
       
-      if (isAlert) {
-        row.style.backgroundColor = "#ffebee";
-        row.style.color = "#c62828";
-        row.style.fontWeight = "bold";
+      // Colorer en rouge si Jours RM > 3 OR Nb Consultations > 3
+      const joursRM = parseFloat(collab.joursRM) || 0;
+      const nbConsultations = collab.count || 0;
+      const isHighAlert = joursRM > 3 || nbConsultations > 3;
+      
+      if (isHighAlert) {
+        row.classList.add("high-alert");
       }
       
       row.innerHTML = `
         <td><strong>${collab.nom}</strong></td>
-        <td style="text-align: center;">
-          <span style="display: inline-block; min-width: 30px; padding: 4px 8px; border-radius: 12px; ${isAlert ? 'background-color: #ef5350; color: white;' : 'background-color: #e3f2fd; color: #1976d2;'} font-weight: bold;">
-            ${collab.count}
-          </span>
-        </td>
+        <td style="text-align: center;">${collab.count}</td>
         <td style="text-align: center;">${collab.joursRM}</td>
         <td style="text-align: center;">${collab.shiftNuit}</td>
         <td>${collab.fonction || "-"}</td>
@@ -1201,6 +1199,10 @@ document.addEventListener("DOMContentLoaded", function () {
       
       tbody.appendChild(row);
     });
+    
+    // Attacher les événements de tri et filtre
+    attachSortableHeaders();
+    attachTableFilters('collaborators');
   }
 
   function updateCharts() {
@@ -1361,194 +1363,323 @@ document.addEventListener("DOMContentLoaded", function () {
    * @returns {Array} Consultations sans heure de retour enregistrée
    */
   function getPendingConsultations() {
+    // Retourne toutes les consultations qui ont une heure de sortie (en attente OU complétées)
     return allConsultations.filter(c => {
-      const heureRetour = c.heureRetour || c.heure_retour || "";
-      return !heureRetour || heureRetour.trim() === "";
+      const heureSortie = c.heureSortie || c.heure_sortie || "";
+      return heureSortie && heureSortie.trim() !== "";
     });
   }
 
+  // ================= ATTACH SORTABLE HEADERS =================
+  function attachSortableHeaders() {
+    document.querySelectorAll(".sortable-header").forEach(header => {
+      header.addEventListener("click", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const colIndex = parseInt(this.dataset.col);
+        const tableType = this.dataset.table;
+        
+        sortPendingTable(colIndex, tableType);
+        
+        // Mettre à jour l'affichage des flèches
+        updateSortArrows(tableType);
+      });
+    });
+  }
+
+  function updateSortArrows(tableType) {
+    const headers = document.querySelectorAll(`.sortable-header[data-table="${tableType}"]`);
+    headers.forEach(header => {
+      const arrow = header.querySelector(".sort-arrow");
+      const colIndex = parseInt(header.dataset.col);
+      
+      if (sortState[tableType].column === colIndex) {
+        arrow.textContent = sortState[tableType].ascending ? "⬆️" : "⬇️";
+      } else {
+        arrow.textContent = "⬆️";
+      }
+    });
+  }
+
+  // ================= SORT PENDING TABLE =================
+  let sortState = { waiting: { column: null, ascending: true }, completed: { column: null, ascending: true }, collaborators: { column: null, ascending: true } };
+
+  function sortPendingTable(columnIndex, tableType) {
+    let tbody;
+    if (tableType === 'waiting') {
+      tbody = document.getElementById("pendingWaitingTableBody");
+    } else if (tableType === 'completed') {
+      tbody = document.getElementById("pendingCompletedTableBody");
+    } else if (tableType === 'collaborators') {
+      tbody = document.getElementById("collaboratorsTableBody");
+    }
+    
+    if (!tbody) return;
+
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+    
+    // Changer direction du tri
+    if (sortState[tableType].column === columnIndex) {
+      sortState[tableType].ascending = !sortState[tableType].ascending;
+    } else {
+      sortState[tableType].column = columnIndex;
+      sortState[tableType].ascending = true;
+    }
+
+    // Trier les lignes
+    rows.sort((a, b) => {
+      const cellA = a.cells[columnIndex]?.textContent.trim() || "";
+      const cellB = b.cells[columnIndex]?.textContent.trim() || "";
+      
+      // Essayer de trier numériquement si possible
+      const numA = parseFloat(cellA);
+      const numB = parseFloat(cellB);
+      
+      let comparison;
+      if (!isNaN(numA) && !isNaN(numB)) {
+        comparison = numA - numB;
+      } else {
+        comparison = cellA.localeCompare(cellB, 'fr');
+      }
+      
+      return sortState[tableType].ascending ? comparison : -comparison;
+    });
+
+    // Réafficher les lignes triées
+    tbody.innerHTML = "";
+    rows.forEach(row => {
+      const newRow = row.cloneNode(true);
+      tbody.appendChild(newRow);
+    });
+
+    // Réattacher les événements selon le type de table
+    if (tableType === 'waiting' || tableType === 'completed') {
+      attachPendingActionListeners();
+    }
+  }
+
+  // ================= UPDATE PENDING LIST =================
   function updatePendingList() {
     const allPending = getPendingConsultations(); // TOUS les en attente
     const filteredPending = filterByDomain(allPending); // Filtrés par domaine
-    let allPendingItems = filteredPending; // Garder la liste filtrée for search
+    
+    const waitingTableBody = document.getElementById("pendingWaitingTableBody");
+    const completedTableBody = document.getElementById("pendingCompletedTableBody");
+    if (!waitingTableBody || !completedTableBody) return;
 
     // Mettre à jour le nombre d'attente dans la section
     if (waitingCount) {
       waitingCount.textContent = allPending.length; // Nombre TOTAL
     }
 
-    if (filteredPending.length === 0) {
-      pendingList.innerHTML = '<div class="empty-pending">✓ Tous les collaborateurs de votre domaine sont de retour !</div>';
-      populatePendingFilters([]);
-      return;
+    // Obtenir la date d'aujourd'hui au format YYYY-MM-DD
+    const todayDate = getTodayMadagascar();
+
+    // Séparer en deux listes : en attente et complétée
+    const waitingList = filteredPending.filter(c => !(c.heureRetour && c.resultat));
+    const completedList = filteredPending.filter(c => {
+      // Complétée = heure retour + résultat + DATE D'AUJOURD'HUI
+      if (!(c.heureRetour && c.resultat)) return false;
+      
+      // Vérifier si la date est aujourd'hui
+      const consultationDate = extractAndCorrectDate(c.date);
+      return consultationDate === todayDate;
+    });
+
+    // ===== AFFICHER TABLE "EN ATTENTE" =====
+    waitingTableBody.innerHTML = "";
+    if (waitingList.length === 0) {
+      waitingTableBody.innerHTML = '<tr><td colspan="14" style="text-align: center; padding: 20px;">✓ Aucun en attente !</td></tr>';
+    } else {
+      waitingList.forEach(c => {
+        const row = document.createElement("tr");
+        const rowId = `pending-${c.matricule}`;
+        
+        row.innerHTML = `
+          <td>${c.matricule}</td>
+          <td>${c.nom} ${c.prenom || ""}</td>
+          <td>${c.fonction}</td>
+          <td>${c.typeConsultation}</td>
+          <td>${c.lieuConsultation}</td>
+          <td>${c.shift}</td>
+          <td>${c.choix || "-"}</td>
+          <td>${extractAndCorrectDate(c.date) || "-"}</td>
+          <td>${extractTimeFromISO(c.heureSortie)}</td>
+          <td><input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}" data-row-id="${rowId}" ${c.heureRetour ? 'checked' : ''}></td>
+          <td><input type="time" class="time-retour" data-matricule="${c.matricule}" value="${c.heureRetour ? extractTimeFromISO(c.heureRetour) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
+          <td>
+            <select class="select-resultat" data-matricule="${c.matricule}" ${c.heureRetour ? '' : 'disabled'} style="width:100%; padding:3px 4px; font-size:10px;">
+              <option value="">-- Sélectionner --</option>
+              <option value="Consultation médical" ${c.resultat === 'Consultation médical' ? 'selected' : ''}>Consultation médical</option>
+              <option value="Repos médical" ${c.resultat === 'Repos médical' ? 'selected' : ''}>Repos médical</option>
+              <option value="Assistante maternelle" ${c.resultat === 'Assistante maternelle' ? 'selected' : ''}>Assistante maternelle</option>
+              <option value="Visite d'embauche" ${c.resultat === "Visite d'embauche" ? 'selected' : ''}>Visite d'embauche</option>
+            </select>
+          </td>
+          <td><input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" value="${c.nbJourRM || ''}" placeholder="J" ${(c.resultat === "Repos médical" || c.resultat === "Assistante maternelle") ? '' : 'style="display:none;"'}></td>
+          <td><button class="btn-validate-retour" data-matricule="${c.matricule}" ${c.heureRetour ? '' : 'disabled'}>✓</button></td>
+        `;
+        waitingTableBody.appendChild(row);
+      });
     }
 
-    // Remplir les filtres avec les options uniques
-    populatePendingFilters(filteredPending);
-
-    // Fonction pour afficher/filtrer la liste
-    function displayPendingList(itemsToDisplay) {
-      // Afficher différemment selon le mode (production readonly vs admin)
-      if (userPermissions === "readonly") {
-        // MODE PRODUCTION: Affichage en lecture seule
-        pendingList.innerHTML = itemsToDisplay.map(c => `
-          <div class="pending-item pending-readonly" data-id="${c.id || c.matricule}" data-search="${(c.nom + ' ' + c.matricule).toLowerCase()}" data-fonction="${(c.fonction || '').toLowerCase()}" data-rattachement="${(c.rattachement || '').toLowerCase()}">
-            <div class="pending-info">
-              <div class="pending-name">👤 ${c.nom}</div>
-              <div class="pending-fonction">👔 Fonction: <strong>${c.fonction || '-'}</strong></div>
-              <div class="pending-details">
-                <span>📍 Matricule: <strong>${c.matricule}</strong></span> |
-                <span>🕐 Sortie: ${extractTimeFromISO(c.heureSortie)}</span> |
-                <span>🏥 ${c.typeConsultation}</span> |
-                <span>📍 ${c.lieuConsultation}</span> |
-                <span>🌙 ${c.shift}</span>
-              </div>
-            </div>
-          </div>
-        `).join("");
-      } else {
-        // MODE ADMIN: Affichage complet avec actions
-        pendingList.innerHTML = itemsToDisplay.map(c => `
-          <div class="pending-item" data-id="${c.id || c.matricule}" data-search="${(c.nom + ' ' + c.matricule).toLowerCase()}" data-fonction="${(c.fonction || '').toLowerCase()}" data-rattachement="${(c.rattachement || '').toLowerCase()}">
-            <div class="pending-info">
-              <div class="pending-name">👤 ${c.nom}</div>
-              <div class="pending-fonction">👔 Fonction: <strong>${c.fonction || '-'}</strong></div>
-              <div class="pending-details">
-                <span>📍 Matricule: <strong>${c.matricule}</strong></span> |
-                <span>🕐 Sortie: ${extractTimeFromISO(c.heureSortie)}</span> |
-                <span>🏥 ${c.typeConsultation}</span> |
-                <span>📍 ${c.lieuConsultation}</span> |
-                <span>🌙 ${c.shift}</span>
-              </div>
-            </div>
-            <div class="pending-actions">
-              <input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}">
-              <input type="time" class="time-retour" data-matricule="${c.matricule}" placeholder="Heure retour" disabled>
-              
-              <select class="select-resultat" data-matricule="${c.matricule}" disabled>
-                <option value="">-- Résultat --</option>
-                <option value="Consultation médical">Consultation médical</option>
-                <option value="Assistante maternelle">Assistante maternelle</option>
-                <option value="Repos médical">Repos médical</option>
-                <option value="anomalie">anomalie</option>
-              </select>
-              
-              <input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" placeholder="Nombre de jours" disabled style="display:none;">
-              
-              <button class="btn-confirm-retour" data-matricule="${c.matricule}" disabled>OK</button>
-            </div>
-          </div>
-        `).join("");
-      }
-
-      // Ajouter les événements (seulement pour admin)
-      if (userPermissions !== "readonly") {
-        attachPendingEventListeners();
-      }
+    // ===== AFFICHER TABLE "COMPLÉTÉE" =====
+    completedTableBody.innerHTML = "";
+    if (completedList.length === 0) {
+      completedTableBody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">✓ Aucune encore</td></tr>';
+    } else {
+      completedList.forEach(c => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${c.matricule}</td>
+          <td>${c.nom} ${c.prenom || ""}</td>
+          <td>${c.fonction}</td>
+          <td>${c.typeConsultation}</td>
+          <td>${c.lieuConsultation}</td>
+          <td>${c.shift}</td>
+          <td>${c.choix || "-"}</td>
+          <td>${extractAndCorrectDate(c.date) || "-"}</td>
+          <td>${extractTimeFromISO(c.heureSortie)}</td>
+          <td>${extractTimeFromISO(c.heureRetour) || "-"}</td>
+          <td>${c.resultat || "-"}</td>
+          <td>${c.nbJourRM || "-"}</td>
+        `;
+        completedTableBody.appendChild(row);
+      });
     }
 
-    // Afficher la liste filtrée
-    displayPendingList(filteredPending);
+    // Attacher les événements pour les actions (seulement sur table "en attente")
+    attachPendingActionListeners();
+    
+    // Attacher les filtres pour les deux tableaux
+    attachTableFilters('waiting');
+    attachTableFilters('completed');
+    
+    // Attacher les en-têtes triables
+    attachSortableHeaders();
+  }
 
-    // ========== APPLIER LES FILTRES ==========
-    applyPendingFilters(filteredPending, displayPendingList);
+  // ================= ATTACH PENDING ACTION LISTENERS =================
+  function attachPendingActionListeners() {
+    // Événement pour les checkboxes de retour
+    document.querySelectorAll(".checkbox-retour").forEach(checkbox => {
+      checkbox.addEventListener("change", function () {
+        const matricule = this.dataset.matricule;
+        const row = this.closest("tr");
+        const timeInput = row.querySelector(".time-retour");
+        const selectResultat = row.querySelector(".select-resultat");
+        const btnValidate = row.querySelector(".btn-validate-retour");
+        
+        if (this.checked) {
+          const now = getCurrentDateTime();
+          timeInput.value = now.time;
+          timeInput.disabled = false;
+          selectResultat.disabled = false;
+          btnValidate.disabled = false;
+        } else {
+          timeInput.value = "";
+          timeInput.disabled = true;
+          selectResultat.value = "";
+          selectResultat.disabled = true;
+          row.querySelector(".input-nbjours").style.display = "none";
+          row.querySelector(".input-nbjours").value = "";
+          btnValidate.disabled = true;
+        }
+      });
+    });
+
+    // Événement pour le select résultat
+    document.querySelectorAll(".select-resultat").forEach(select => {
+      select.addEventListener("change", function () {
+        const row = this.closest("tr");
+        const inputJours = row.querySelector(".input-nbjours");
+        const selectedValue = this.value;
+        
+        // Afficher/masquer le champ jours
+        if (selectedValue === "Repos médical" || selectedValue === "Assistante maternelle") {
+          inputJours.style.display = "inline-block";
+          inputJours.disabled = false;
+          inputJours.focus();
+        } else {
+          inputJours.value = "";
+          inputJours.style.display = "none";
+          inputJours.disabled = true;
+        }
+      });
+    });
+
+    // Événement pour le bouton de validation
+    document.querySelectorAll(".btn-validate-retour").forEach(btn => {
+      btn.addEventListener("click", async function (e) {
+        e.preventDefault();
+        const matricule = this.dataset.matricule;
+        const row = this.closest("tr");
+        const timeInput = row.querySelector(".time-retour");
+        const selectResultat = row.querySelector(".select-resultat");
+        const inputJours = row.querySelector(".input-nbjours");
+        const selectedResult = selectResultat.value;
+        
+        // Vérifier que le résultat est sélectionné
+        if (!selectedResult || selectedResult === "") {
+          showMessage("❌ Veuillez sélectionner un résultat avant de valider", "error");
+          return;
+        }
+        
+        // Vérifier que les jours sont remplis si nécessaire
+        if ((selectedResult === "Repos médical" || selectedResult === "Assistante maternelle") && !inputJours.value) {
+          showMessage("❌ Veuillez entrer le nombre de jours", "error");
+          inputJours.focus();
+          return;
+        }
+        
+        // Enregistrer les données
+        const params = new URLSearchParams({
+          action: "setRetour",
+          password: userPassword,
+          matricule: matricule,
+          heureRetour: timeInput.value,
+          resultat: selectedResult,
+          nbJourRM: inputJours.value || ""
+        });
+
+        try {
+          this.disabled = true;
+          this.textContent = "⏳ Enregistrement...";
+          
+          const res = await fetch(`${API_URL}?${params}`);
+          const json = await res.json();
+
+          if (json.success) {
+            showMessage("✅ Retour enregistré avec succès");
+            
+            // Recharger la liste après enregistrement
+            setTimeout(() => {
+              loadDashboardData();
+            }, 1000);
+          } else {
+            showMessage("❌ Erreur : " + json.error, "error");
+            this.disabled = false;
+            this.textContent = "✓ Valider";
+          }
+        } catch (e) {
+          console.error("Erreur:", e);
+          showMessage("❌ Erreur serveur", "error");
+          this.disabled = false;
+          this.textContent = "✓ Valider";
+        }
+      });
+    });
+
+    // Événement pour mettre à jour les jours en temps réel
+    document.querySelectorAll(".input-nbjours").forEach(input => {
+      input.addEventListener("input", function () {
+        // Permet à l'utilisateur de voir les changements en temps réel
+      });
+    });
   }
 
   // ================= POPULATE PENDING FILTERS =================
-  function populatePendingFilters(consultations) {
-    const filterFonction = document.getElementById("filterPendingFonction");
-    const filterRattachement = document.getElementById("filterPendingRattachement");
-
-    if (!filterFonction || !filterRattachement) return;
-
-    // Récupérer les fonctions et rattachements uniques
-    const fonctions = [...new Set(consultations.map(c => c.fonction).filter(f => f))];
-    const rattachements = [...new Set(consultations.map(c => c.rattachement).filter(r => r))];
-
-    // Remplir fonction
-    filterFonction.innerHTML = '<option value="">-- Toutes les fonctions --</option>';
-    fonctions.sort().forEach(f => {
-      const opt = document.createElement("option");
-      opt.value = f.toLowerCase();
-      opt.textContent = f;
-      filterFonction.appendChild(opt);
-    });
-
-    // Remplir rattachement
-    filterRattachement.innerHTML = '<option value="">-- Tous les rattachements --</option>';
-    rattachements.sort().forEach(r => {
-      const opt = document.createElement("option");
-      opt.value = r.toLowerCase();
-      opt.textContent = r;
-      filterRattachement.appendChild(opt);
-    });
-  }
-
-  // ================= APPLY PENDING FILTERS =================
-  function applyPendingFilters(allItems, displayFunction) {
-    const searchInput = document.getElementById("searchPending");
-    const filterFonction = document.getElementById("filterPendingFonction");
-    const filterRattachement = document.getElementById("filterPendingRattachement");
-    const btnReset = document.getElementById("btnResetPendingFilters");
-
-    function filterAndDisplay() {
-      let filtered = allItems;
-
-      // Filtrer par recherche
-      const searchTerm = (searchInput?.value || "").toLowerCase();
-      if (searchTerm) {
-        filtered = filtered.filter(c => {
-          return (c.nom.toLowerCase().includes(searchTerm) || c.matricule.toLowerCase().includes(searchTerm));
-        });
-      }
-
-      // Filtrer par fonction
-      const fonctionFilter = (filterFonction?.value || "").toLowerCase();
-      if (fonctionFilter) {
-        filtered = filtered.filter(c => {
-          return (c.fonction || "").toLowerCase() === fonctionFilter;
-        });
-      }
-
-      // Filtrer par rattachement
-      const rattachementFilter = (filterRattachement?.value || "").toLowerCase();
-      if (rattachementFilter) {
-        filtered = filtered.filter(c => {
-          return (c.rattachement || "").toLowerCase() === rattachementFilter;
-        });
-      }
-
-      // Afficher les résultats
-      if (filtered.length === 0) {
-        document.getElementById("pendingList").innerHTML = '<div class="empty-pending">❌ Aucun résultat avec ces filtres</div>';
-      } else {
-        displayFunction(filtered);
-      }
-    }
-
-    // Ajouter les event listeners
-    if (searchInput) {
-      searchInput.addEventListener("input", filterAndDisplay);
-    }
-
-    if (filterFonction) {
-      filterFonction.addEventListener("change", filterAndDisplay);
-    }
-
-    if (filterRattachement) {
-      filterRattachement.addEventListener("change", filterAndDisplay);
-    }
-
-    if (btnReset) {
-      btnReset.addEventListener("click", function () {
-        if (searchInput) searchInput.value = "";
-        if (filterFonction) filterFonction.value = "";
-        if (filterRattachement) filterRattachement.value = "";
-        filterAndDisplay();
-      });
-    }
-  }
-
   // ========== ATTACHER LES EVENT LISTENERS À LA LISTE EN ATTENTE ==========
   function attachPendingEventListeners() {
     document.querySelectorAll(".checkbox-retour").forEach(checkbox => {
@@ -1894,7 +2025,7 @@ document.addEventListener("DOMContentLoaded", function () {
     reportTableBody.innerHTML = "";
 
     if (consultations.length === 0) {
-      reportTableBody.innerHTML = '<tr><td colspan="15" style="text-align: center; padding: 20px;">Aucune consultation trouvée</td></tr>';
+      reportTableBody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">Aucune consultation trouvée</td></tr>';
     } else {
       consultations.forEach(c => {
         const row = document.createElement("tr");
@@ -1902,29 +2033,107 @@ document.addEventListener("DOMContentLoaded", function () {
         row.style.backgroundColor = rattachementColor;
         row.innerHTML = `
           <td>${c.matricule}</td>
-          <td>${c.nom}</td>
+          <td>${c.nom} ${c.prenom || ""}</td>
           <td>${c.fonction}</td>
-          <td>${extractAndCorrectDate(c.date)}</td>
           <td>${c.typeConsultation}</td>
           <td>${c.lieuConsultation}</td>
-          <td>${c.choix || "-"}</td>
           <td>${c.shift}</td>
+          <td>${c.choix || "-"}</td>
+          <td>${extractAndCorrectDate(c.date)}</td>
           <td>${extractTimeFromISO(c.heureSortie)}</td>
           <td>${c.heureRetour ? extractTimeFromISO(c.heureRetour) : "-"}</td>
           <td>${c.resultat || "-"}</td>
           <td>${c.nbJourRM || "-"}</td>
-          <td>${c.anomalie || "-"}</td>
-          <td>${c.casGrave || "-"}</td>
-          <td>${c.commentaires || "-"}</td>
         `;
         reportTableBody.appendChild(row);
       });
     }
     
+    // Attacher les filtres
+    attachTableFilters('report');
+    
     updateCollaboratorsTable(consultations);
     updateReportStatistics(consultations);
     updateReportCharts(consultations);
     loadConsultationRates();
+  }
+
+  // ================= ATTACH TABLE FILTERS =================
+  function attachTableFilters(tableType) {
+    let filterSelector;
+    if (tableType === 'report') {
+      filterSelector = '.filter-col';
+    } else if (tableType === 'waiting') {
+      filterSelector = '.filter-waiting-col';
+    } else if (tableType === 'completed') {
+      filterSelector = '.filter-completed-col';
+    } else if (tableType === 'pending') {
+      filterSelector = '.filter-pending-col';
+    } else if (tableType === 'collaborators') {
+      filterSelector = '.filter-collaborators-col';
+    } else {
+      return;
+    }
+
+    const filterInputs = document.querySelectorAll(filterSelector);
+    if (filterInputs.length === 0) return;
+
+    filterInputs.forEach(input => {
+      input.addEventListener("input", () => applyTableFilters(tableType));
+      input.addEventListener("change", () => applyTableFilters(tableType));
+    });
+  }
+
+  function applyTableFilters(tableType) {
+    let tbody;
+    if (tableType === 'report') {
+      tbody = document.getElementById('reportTableBody');
+    } else if (tableType === 'waiting') {
+      tbody = document.getElementById('pendingWaitingTableBody');
+    } else if (tableType === 'completed') {
+      tbody = document.getElementById('pendingCompletedTableBody');
+    } else if (tableType === 'pending') {
+      tbody = document.getElementById('pendingTableBody');
+    } else if (tableType === 'collaborators') {
+      tbody = document.getElementById('collaboratorsTableBody');
+    }
+
+    if (!tbody) return;
+
+    const rows = tbody.querySelectorAll('tr');
+    let filterSelector;
+    if (tableType === 'report') {
+      filterSelector = '.filter-col';
+    } else if (tableType === 'waiting') {
+      filterSelector = '.filter-waiting-col';
+    } else if (tableType === 'completed') {
+      filterSelector = '.filter-completed-col';
+    } else if (tableType === 'pending') {
+      filterSelector = '.filter-pending-col';
+    } else if (tableType === 'collaborators') {
+      filterSelector = '.filter-collaborators-col';
+    }
+
+    const filterInputs = document.querySelectorAll(filterSelector);
+    
+    rows.forEach(row => {
+      const cells = row.querySelectorAll('td');
+      let show = true;
+
+      filterInputs.forEach(input => {
+        const colIndex = parseInt(input.dataset.col);
+        const filterValue = input.value.toLowerCase();
+        
+        if (filterValue && cells[colIndex]) {
+          const cellValue = cells[colIndex].textContent.toLowerCase();
+          if (!cellValue.includes(filterValue)) {
+            show = false;
+          }
+        }
+      });
+
+      row.style.display = show ? '' : 'none';
+    });
   }
 
   function updateReportStatistics(consultations) {

@@ -181,7 +181,7 @@ body {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   text-align: center;
-  padding: 15px;
+  padding: 30px 15px;
   font-size: 16px;
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -199,12 +199,12 @@ body {
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 100%;
   margin: 0 auto;
   background: white;
-  padding: 30px;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  padding: 15px;
+  border-radius: 0px;
+  box-shadow: none;
 }
 
 .container h2 {
@@ -840,9 +840,11 @@ small.warning {
 /* ============== PENDING LIST ============== */
 .pending-section {
   background: #f8f9fa;
-  padding: 25px;
-  border-radius: 10px;
-  margin-top: 30px;
+  padding: 15px;
+  border-radius: 5px;
+  margin-top: 15px;
+  width: 100%;
+  overflow: hidden;
 }
 
 .pending-section h3 {
@@ -952,16 +954,16 @@ small.warning {
 /* ============== RAPPORT SECTION ============== */
 .report-section {
   background: white;
-  border-radius: 10px;
-  padding: 30px;
-  margin-top: 30px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  border-radius: 0px;
+  padding: 15px;
+  margin-top: 15px;
+  box-shadow: none;
 }
 
 .report-section h3 {
   color: #333;
-  margin-bottom: 20px;
-  font-size: 20px;
+  margin-bottom: 15px;
+  font-size: 18px;
 }
 
 .filter-section {
@@ -1169,6 +1171,7 @@ small.warning {
 .table-container {
   overflow-x: auto;
   margin-top: 20px;
+  width: 100%;
 }
 
 .report-table {
@@ -1222,6 +1225,16 @@ small.warning {
 
 .report-table tbody tr:nth-child(odd) {
   background: #fafafa;
+}
+
+.report-table tbody tr.high-alert {
+  background-color: #ffcccc !important;
+  color: #8b0000;
+  font-weight: 600;
+}
+
+.report-table tbody tr.high-alert:hover {
+  background-color: #ff9999 !important;
 }
 
 /* ============== RESPONSIVE ============== */
@@ -1505,9 +1518,13 @@ small.warning {
 
 .pending-filters {
   background: #f9f9f9;
-  padding: 15px;
+  padding: 20px;
   border-radius: 8px;
   border: 1px solid #e0e0e0;
+  display: grid;
+  grid-template-columns: 1fr 1fr 150px;
+  gap: 15px;
+  align-items: flex-end;
 }
 
 .btn-reset-pending {
@@ -1657,4 +1674,220 @@ small.warning {
   .consultation-rate-card .rate-stat-value {
     font-size: 18px;
   }
+}
+
+/* ============== TABLE FILTER HEADERS ============== */
+.table-filter-row {
+  background: #f0f0f0;
+  border-bottom: 2px solid #667eea;
+}
+
+.table-filter-row th {
+  padding: 10px 5px !important;
+  text-align: center;
+}
+
+.table-filter-row input[type="text"],
+.table-filter-row select {
+  width: 100%;
+  padding: 6px 4px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.table-filter-row input[type="text"]:focus,
+.table-filter-row select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+/* ============== PENDING TABLE ============== */
+.pending-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  background: white;
+}
+
+.pending-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  position: sticky;
+  top: 0;
+}
+
+.pending-table th {
+  padding: 6px 3px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid #667eea;
+  min-width: 50px;
+  white-space: nowrap;
+  font-size: 9px;
+}
+
+.pending-table td {
+  padding: 4px 3px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 10px;
+}
+
+.pending-table tbody tr:hover {
+  background: #f8f9fa;
+  transition: background 0.2s;
+}
+
+.pending-table tbody tr:nth-child(odd) {
+  background: #fafafa;
+}
+
+.statut-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.statut-badge.attente {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+}
+
+.statut-badge.complete {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+/* ============== PENDING TABLE INPUTS ============== */
+.pending-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.pending-table input[type="time"],
+.pending-table select,
+.pending-table input[type="number"] {
+  width: 100%;
+  padding: 3px 4px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 10px;
+  background: white;
+}
+
+.pending-table input[type="time"]:focus,
+.pending-table select:focus,
+.pending-table input[type="number"]:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+.pending-table input[type="time"]:disabled,
+.pending-table select:disabled,
+.pending-table input[type="number"]:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ============== SELECT RESULTAT ============== */
+.select-resultat {
+  width: 100% !important;
+  padding: 3px 4px !important;
+  border: 1px solid #ddd !important;
+  border-radius: 3px !important;
+  font-size: 9px !important;
+  background: white !important;
+  cursor: pointer !important;
+}
+
+.select-resultat:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+.select-resultat:disabled {
+  background-color: #f5f5f5;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ============== RESULT BUTTONS ============== */
+.result-buttons {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.btn-result {
+  padding: 4px 6px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 45px;
+  text-align: center;
+}
+
+.btn-result:hover {
+  border-color: #667eea;
+  background: #f0f5ff;
+}
+
+.btn-result.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: #667eea;
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+}
+
+.btn-result:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============== VALIDATE BUTTON ============== */
+.btn-validate-retour {
+  padding: 3px 6px;
+  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 4px rgba(39, 174, 96, 0.2);
+  width: 100%;
+}
+
+.btn-validate-retour:hover:not(:disabled) {
+  background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+.btn-validate-retour:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-validate-retour:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #bdc3c7;
 }
