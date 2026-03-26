@@ -821,10 +821,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const c = JSON.parse(collaborateurSelect.value);
 
-    // Vérifier le nombre de consultations pour ce matricule aujourd'hui
-    const countToday = countTodayConsultationsForMatricule(c.matricule);
-    if (countToday >= 1) {
-      showMessage(`⚠️ ALERTE: ${c.nom} a déjà une consultation aujourd'hui.`, "error");
+    // Vérifier si la personne a une consultation EN COURS (sans heure de retour) aujourd'hui
+    // Permet plusieurs consultations si les précédentes sont clôturées
+    const todayConsultations = getTodayConsultations();
+    const openConsultationToday = todayConsultations.find(con => 
+      con.matricule === c.matricule && (!con.heureRetour || con.heureRetour.trim() === "")
+    );
+    
+    if (openConsultationToday) {
+      showMessage(`⚠️ ALERTE: ${c.nom} a une consultation EN COURS aujourd'hui. Veuillez la clôturer avant d'en ajouter une nouvelle.`, "error");
       return;
     }
 
@@ -858,6 +863,8 @@ document.addEventListener("DOMContentLoaded", function () {
       if (json.success) {
         showMessage("✅ Enregistré avec succès !");
         resetForm();
+        // Recharger les consultations pour mettre à jour la liste en cache
+        await loadDashboardData();
       } else {
         showMessage("❌ Erreur : " + json.error, "error");
         btnSave.disabled = false;
