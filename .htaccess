@@ -1,0 +1,73 @@
+# =========================================================
+# Configuration Apache pour l'application OSTIE
+# =========================================================
+# Placez ce fichier dans le répertoire racine de l'application
+# Il améliore la compatibilité et la sécurité
+
+# Activer mod_rewrite
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  
+  # Rendre les fichiers et répertoires accessibles
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+  
+  # Rediriger vers index.html pour les routes non existantes
+  RewriteRule ^(.*)$ index.html [QSA,L]
+</IfModule>
+
+# Définir les types MIME corrects
+<IfModule mod_mime.c>
+  AddType application/javascript js
+  AddType text/css css
+  AddType image/png png
+  AddType image/jpeg jpg jpeg
+  AddType text/html html htm
+  AddCharset UTF-8 .html .css .js .json
+</IfModule>
+
+# Activer la compression GZIP
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html
+  AddOutputFilterByType DEFLATE text/plain
+  AddOutputFilterByType DEFLATE text/xml
+  AddOutputFilterByType DEFLATE text/css
+  AddOutputFilterByType DEFLATE application/javascript
+  AddOutputFilterByType DEFLATE application/json
+</IfModule>
+
+# Mettre en cache les fichiers statiques
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresDefault "access plus 1 year"
+  
+  # Cache court pour les fichiers HTML
+  ExpiresByType text/html "access plus 1 day"
+  
+  # Cache long pour les ressources
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/gif "access plus 1 year"
+</IfModule>
+
+# Headers pour meilleure sécurité
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# Protéger les fichiers sensibles
+<FilesMatch "\.(git|env|config)">
+  Deny from all
+</FilesMatch>
+
+# Activer CORS pour les requêtes externes (si nécessaire)
+<IfModule mod_headers.c>
+  Header set Access-Control-Allow-Origin "*"
+  Header set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
+  Header set Access-Control-Allow-Headers "Content-Type"
+</IfModule>

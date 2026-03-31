@@ -1,6 +1,23 @@
 document.addEventListener("DOMContentLoaded", function () {
 
-  const API_URL = "https://script.google.com/macros/s/AKfycbyY4C2YVyBBgf-B-PkCkDXGYOVcqGi0jwdml67psZA7kszvNfFXITqBLPe9nFBjKQP1jA/exec";
+  // ================= CONFIG API =================
+  // Utiliser la configuration du fichier config.js
+  const API_URL = (typeof CONFIG !== 'undefined' && CONFIG.API_URL) 
+    ? CONFIG.API_URL 
+    :"https://script.google.com/macros/s/AKfycbyMdarl7vUC2Ivh_Yk86EcLSfzsdMWy7tFAv0E6C04nh_HdokjRsCDfpMG4HMrX4_bl5Q/exec";
+  
+  const API_TIMEOUT = (typeof CONFIG !== 'undefined' && CONFIG.API_TIMEOUT) 
+    ? CONFIG.API_TIMEOUT 
+    : 15000;
+  
+  // Validation de l'URL API
+  if (!API_URL || API_URL.includes("script.google.com") === false) {
+    console.error("❌ ERREUR: Veuillez configurer l'URL Google Apps Script dans config.js");
+  } else {
+    console.log("✅ Configuration API chargée");
+    console.log("   API_URL:", API_URL.substring(0, 60) + "...");
+    console.log("   Pour déboguer: Ouvrez F12 → Console → Tapez 'API_URL' pour voir l'URL complète");
+  }
 
 
 
@@ -17,34 +34,11 @@ document.addEventListener("DOMContentLoaded", function () {
   let chartJours = null;
   let rattachementColorMap = {}; // Mémoriser les couleurs des rattachements
 
-  // ================= LOAD WAITING LIST FROM STORAGE =================
-  // Créer une clé unique par utilisateur pour éviter les conflits multi-utilisateurs
-  function getWaitingListStorageKey() {
-    if (userPassword) {
-      return `waitingPersonnes_${userPassword}`;
-    }
-    return "waitingPersonnes_default";
-  }
-
-  let waitingPersonnesStorageKey = getWaitingListStorageKey();
-  let waitingPersonnesData = localStorage.getItem(waitingPersonnesStorageKey) || "[]";
+  // ================= WAITING LIST =================
+  // La liste d'attente est maintenant stockée dans la base de données (Google Sheet)
+  // Elle sera chargée via loadWaitingList() après la connexion
   let waitingPersonnes = [];
-  
-  // Validation et parsing sécurisé
-  if (isLoggedIn && userPassword) {
-    try {
-      waitingPersonnes = JSON.parse(waitingPersonnesData);
-      if (!Array.isArray(waitingPersonnes)) {
-        console.warn("⚠️ waitingPersonnes n'est pas un tableau, réinitialisation");
-        waitingPersonnes = [];
-      }
-    } catch (e) {
-      console.warn("Erreur de parsing waitingPersonnes depuis localStorage:", e);
-      waitingPersonnes = [];
-    }
-  } else {
-    waitingPersonnes = [];
-  }
+  let waitingListRefreshInterval = null; // Pour l'auto-refresh
 
   // ================= SLOGANS & MOTTOS =================
   const slogans = [
@@ -169,10 +163,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const waitingCount = document.getElementById("waitingCount");
   const btnAddToWaiting = document.getElementById("btnAddToWaiting");
 
-  // ================= SAVE WAITING LIST TO STORAGE =================
-  function saveWaitingList() {
-    localStorage.setItem(waitingPersonnesStorageKey, JSON.stringify(waitingPersonnes));
-  }
+  
 
   function rotateSlogan() {
     const mottoText = document.getElementById("mottoText");
@@ -321,8 +312,27 @@ document.addEventListener("DOMContentLoaded", function () {
 
     console.log("Tentative de login:", {username, password});
 
+    // Validation basique
+    if (!username || !password) {
+      loginError.textContent = "❌ Veuillez remplir tous les champs";
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_URL}?action=validateLogin&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT); // Timeout configurable
+
+      const response = await fetch(
+        `${API_URL}?action=validateLogin&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+        { signal: controller.signal }
+      );
+      
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Erreur serveur: ${response.status} ${response.statusText}`);
+      }
+
       const result = await response.json();
 
       if (result.success) {
@@ -341,31 +351,31 @@ document.addEventListener("DOMContentLoaded", function () {
         passwordInput.value = "";
         showMessage("✅ Connecté avec succès!");
         
-        // Recalculer la clé de la liste d'attente pour ce nouvel utilisateur
-        waitingPersonnesStorageKey = getWaitingListStorageKey();
-        // Recharger la liste d'attente du nouvel utilisateur
-        waitingPersonnesData = localStorage.getItem(waitingPersonnesStorageKey) || "[]";
-        try {
-          waitingPersonnes = JSON.parse(waitingPersonnesData);
-          if (!Array.isArray(waitingPersonnes)) {
-            waitingPersonnes = [];
-          }
-        } catch (e) {
-          console.warn("⚠️ Erreur restauration liste d'attente:", e);
-          waitingPersonnes = [];
-        }
-        
         // Adapter l'interface selon le type d'utilisateur
         setupUIForUserType(userType, userPermissions);
         
         loadCollaborateurs();
+        loadWaitingList(); // Charger la liste d'attente depuis la base de données
+        
+        // Recharger la liste d'attente automatiquement toutes les 30 secondes
+        startAutoRefreshWaitingList();
       } else {
         console.warn("Login échoué - identifiants incorrects");
-        loginError.textContent = "❌ " + result.message;
+        loginError.textContent = "❌ " + (result.message || "Identifiants incorrects");
       }
     } catch (err) {
       console.error("Erreur login:", err);
-      loginError.textContent = "❌ Erreur lors de la connexion";
+      let errorMsg = "❌ Erreur lors de la connexion";
+      
+      if (err.name === 'AbortError') {
+        errorMsg = "❌ Connexion expirée - Vérifiez votre connexion Internet";
+      } else if (err.message.includes("Failed to fetch")) {
+        errorMsg = "❌ Impossible de se connecter au serveur. Vérifiez l'URL API.";
+      } else if (err.message.includes("NetworkError")) {
+        errorMsg = "❌ Erreur réseau - Vérifiez votre connexion Internet";
+      }
+      
+      loginError.textContent = errorMsg;
     }
   });
 
@@ -374,12 +384,12 @@ document.addEventListener("DOMContentLoaded", function () {
     userPassword = "";
     userType = "";
     userPermissions = "";
-    waitingPersonnes = []; // Effacer la liste d'attente
+    waitingPersonnes = []; // Effacer la liste d'attente locale
+    stopAutoRefreshWaitingList(); // Arrêter l'auto-refresh
     localStorage.setItem("isLoggedIn", "false");
     localStorage.setItem("userPassword", "");
     localStorage.setItem("userType", "");
     localStorage.setItem("userPermissions", "");
-    localStorage.setItem(waitingPersonnesStorageKey, "[]"); // Effacer la liste d'attente du storage
     loginPage.classList.add("active");
     appPage.classList.remove("active");
     resetForm();
@@ -540,6 +550,10 @@ document.addEventListener("DOMContentLoaded", function () {
       
       // Charger les données du dashboard
       loadCollaborateurs();
+      loadWaitingList(); // Charger la liste d'attente depuis la base de données
+      
+      // Recharger la liste d'attente automatiquement toutes les 30 secondes
+      startAutoRefreshWaitingList();
     }, 100);
   }
 
@@ -656,7 +670,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ================= AJOUTER À LA LISTE D'ATTENTE =================
   if (btnAddToWaiting) {
-    btnAddToWaiting.addEventListener("click", function () {
+    btnAddToWaiting.addEventListener("click", async function () {
       if (!collaborateurSelect.value) {
         showMessage("❌ Sélectionnez un collaborateur", "error");
         return;
@@ -664,6 +678,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       try {
         const c = JSON.parse(collaborateurSelect.value);
+        console.log("1️⃣ Collaborateur sélectionné:", c);
         
         // Vérifier que l'objet est valide
         if (!c || !c.matricule || !c.nom) {
@@ -677,17 +692,120 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
-        waitingPersonnes.push(c);
-        saveWaitingList(); // Sauvegarder dans localStorage
-        updateWaitingList();
-        showMessage("✅ Ajouté à la liste d'attente");
-        collaborateurSelect.value = "";
-        if (searchInput) searchInput.value = "";
+        // Obtenir l'heure actuelle
+        const now = new Date();
+        const heureAjout = String(now.getHours()).padStart(2, "0") + ":" + 
+                          String(now.getMinutes()).padStart(2, "0");
+        console.log("2️⃣ Heure d'ajout:", heureAjout);
+
+        // Construire l'URL
+        const url = `${API_URL}?action=addToWaiting&matricule=${encodeURIComponent(c.matricule)}&nom=${encodeURIComponent(c.nom)}&fonction=${encodeURIComponent(c.fonction || "")}&rattachement=${encodeURIComponent(c.rattachement || "")}&heureAjout=${heureAjout}`;
+        console.log("3️⃣ URL API:", url);
+
+        // Ajouter à la base de données via l'API
+        const response = await fetch(url);
+        console.log("4️⃣ Statut HTTP:", response.status, response.statusText);
+        
+        if (!response.ok) {
+          throw new Error(`Erreur serveur HTTP ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log("5️⃣ Réponse API addToWaiting:", result);
+        
+        if (result && result.success === true) {
+          console.log("6️⃣ Succès! Ajout à la liste d'attente");
+          
+          // Ajouter IMMÉDIATEMENT à la liste locale (optimistic update)
+          const newPersonne = {
+            matricule: c.matricule,
+            nom: c.nom,
+            fonction: c.fonction || "",
+            rattachement: c.rattachement || "",
+            heureAjout: heureAjout,
+            dateAjout: new Date().toLocaleDateString('fr-FR')
+          };
+          waitingPersonnes.push(newPersonne);
+          updateWaitingList();
+          
+          // Recharger depuis le serveur en arrière-plan
+          loadWaitingList().catch(e => console.error("Erreur rechargement:", e));
+          
+          showMessage("✅ Ajouté à la liste d'attente");
+          collaborateurSelect.value = "";
+          if (searchInput) searchInput.value = "";
+        } else {
+          const errorMsg = result?.error || "Erreur inconnue";
+          console.error("6️⃣ Erreur API:", errorMsg);
+          showMessage(`❌ Erreur: ${errorMsg}`, "error");
+        }
       } catch (e) {
-        console.error("⚠️ Erreur lors de l'ajout à la liste d'attente:", e);
-        showMessage("❌ Erreur: impossible d'ajouter à la liste d'attente", "error");
+        console.error("❌ Erreur lors de l'ajout à la liste d'attente:", e.message);
+        console.error("Stack trace:", e.stack);
+        showMessage(`❌ Erreur: ${e.message}`, "error");
       }
     });
+  }
+
+  // Charger la liste d'attente depuis la base de données
+  async function loadWaitingList() {
+    try {
+      console.log("📥 Chargement de la liste d'attente...");
+      const response = await fetch(`${API_URL}?action=getWaitingList`);
+      console.log("📊 Statut HTTP getWaitingList:", response.status);
+      
+      if (!response.ok) {
+        throw new Error(`Erreur serveur HTTP ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log("📊 Réponse API getWaitingList:", result);
+      
+      if (result && result.success === true && Array.isArray(result.data)) {
+        console.log(`📊 ${result.data.length} entrées reçues`);
+        
+        // Filtrer les données pour enlever les headers
+        let data = result.data.filter(row => {
+          // Ignorer si c'est la ligne de header (starts with "Matricule", "Nom", etc.)
+          if (row.matricule === 'Matricule' || row.matricule === 'matricule') {
+            console.log("🗑️ Headers détectés, ignorés");
+            return false;
+          }
+          // Ignorer les lignes vides
+          if (!row.matricule || !row.nom) {
+            return false;
+          }
+          return true;
+        });
+        
+        console.log(`📊 ${data.length} personnes valides en attente`);
+        waitingPersonnes = data;
+        updateWaitingList();
+      } else if (result && Array.isArray(result)) {
+        // Parfois la réponse est directement un tableau
+        let data = result.filter(row => {
+          if (row.matricule === 'Matricule' || row.matricule === 'matricule') {
+            return false;
+          }
+          if (!row.matricule || !row.nom) {
+            return false;
+          }
+          return true;
+        });
+        
+        console.log(`📊 ${data.length} personnes (format alternatif)`);
+        waitingPersonnes = data;
+        updateWaitingList();
+      } else {
+        console.warn("⚠️ Format de réponse inattendu:", result);
+        waitingPersonnes = [];
+        updateWaitingList();
+      }
+    } catch (e) {
+      console.error("⚠️ Erreur lors du chargement de la liste d'attente:", e.message);
+      waitingPersonnes = [];
+      updateWaitingList();
+    }
   }
 
   function updateWaitingList() {
@@ -703,10 +821,15 @@ document.addEventListener("DOMContentLoaded", function () {
       waitingPersonnes = [];
     }
     
+    console.log("📋 DEBUG updateWaitingList - waitingPersonnes:", waitingPersonnes);
+    console.log("📋 DEBUG - Nombre d'attentes:", waitingPersonnes.length);
+    
     waitingCount.textContent = waitingPersonnes.length;
     waitingList.innerHTML = "";
 
+    // Si aucune personne valide en attente, masquer la section COMPLÈTEMENT
     if (waitingPersonnes.length === 0) {
+      console.log("📋 Aucune personne valide en attente - masquage complet de la section");
       waitingSection.style.display = "none";
       return;
     }
@@ -720,14 +843,38 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
       
+      console.log(`📋 Affichage personne ${index}:`, {
+        matricule: personne.matricule,
+        nom: personne.nom,
+        fonction: personne.fonction,
+        heureAjout: personne.heureAjout
+      });
+      
       const item = document.createElement("div");
       item.className = "waiting-item";
+      
+      // Extraire juste l'heure si c'est un format ISO (HH:MM:SS ou date ISO)
+      let heureAffichage = personne.heureAjout || '-';
+      if (heureAffichage.includes('T')) {
+        // Format ISO: extraire l'heure
+        const parts = heureAffichage.split('T');
+        heureAffichage = parts[1] ? parts[1].substring(0, 5) : heureAffichage;
+      } else if (heureAffichage.length > 5) {
+        // Format HH:MM:SS → cropper à HH:MM
+        heureAffichage = heureAffichage.substring(0, 5);
+      }
+      
       item.innerHTML = `
         <input type="checkbox" class="waiting-checkbox" data-index="${index}">
         <div class="waiting-item-info">
-          <div class="waiting-item-matricule">${personne.matricule}</div>
+          <div class="waiting-item-header">
+            <div class="waiting-item-matricule">${personne.matricule}</div>
+            <div class="waiting-item-heure">⏰ ${heureAffichage}</div>
+          </div>
           <div class="waiting-item-nom">${personne.nom}</div>
+          <div class="waiting-item-fonction">${personne.fonction || ''}</div>
         </div>
+        <button class="waiting-item-delete" title="Annuler l'attente">✕</button>
       `;
 
       const checkbox = item.querySelector(".waiting-checkbox");
@@ -737,8 +884,100 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       });
 
+      // Bouton X pour annuler
+      const deleteBtn = item.querySelector(".waiting-item-delete");
+      deleteBtn.addEventListener("click", async function (e) {
+        e.stopPropagation();
+        const matricule = personne.matricule;
+        
+        // Supprimer directement sans alerte
+        try {
+          const response = await fetch(`${API_URL}?action=removeFromWaiting&matricule=${encodeURIComponent(matricule)}`);
+          const result = await response.json();
+          
+          if (result.success) {
+            await loadWaitingList();
+            showMessage("✅ Personne supprimée de l'attente");
+          }
+        } catch (e) {
+          console.error("⚠️ Erreur suppression:", e);
+          showMessage("❌ Erreur lors de la suppression", "error");
+        }
+      });
+
       waitingList.appendChild(item);
     });
+    
+    // Nettoyer les attentes expirées (plus d'un jour)
+    cleanExpiredWaiting();
+  }
+
+  // Nettoyer automatiquement les attentes de plus d'un jour
+  async function cleanExpiredWaiting() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const toDelete = [];
+    
+    for (const personne of waitingPersonnes) {
+      if (!personne.dateAjout) continue;
+      
+      // Parser la date (format: "31/03/2026" ou ISO)
+      let dateAjout;
+      if (personne.dateAjout.includes('/')) {
+        // Format français DD/MM/YYYY
+        const parts = personne.dateAjout.split('/');
+        dateAjout = new Date(parts[2], parts[1] - 1, parts[0]);
+      } else {
+        // Format ISO YYYY-MM-DD
+        dateAjout = new Date(personne.dateAjout);
+      }
+      
+      // Vérifier si c'est d'hier ou plus ancien
+      dateAjout.setHours(0, 0, 0, 0);
+      const diffDays = Math.floor((today - dateAjout) / (1000 * 60 * 60 * 24));
+      
+      if (diffDays > 0) {
+        console.log(`🗑️ Suppression auto: ${personne.nom} (ajouté il y a ${diffDays} jour(s))`);
+        toDelete.push(personne.matricule);
+      }
+    }
+    
+    // Supprimer les entrées expirées
+    for (const matricule of toDelete) {
+      try {
+        await fetch(`${API_URL}?action=removeFromWaiting&matricule=${encodeURIComponent(matricule)}`);
+      } catch (e) {
+        console.error("⚠️ Erreur suppression auto:", e);
+      }
+    }
+    
+    // Recharger si des suppression ont été faites
+    if (toDelete.length > 0) {
+      setTimeout(() => loadWaitingList(), 500);
+    }
+  }
+
+  // Démarrer l'auto-refresh de la liste d'attente
+  function startAutoRefreshWaitingList() {
+    // Arrêter tout intervalle existant
+    stopAutoRefreshWaitingList();
+    
+    // Recharger toutes les 30 secondes
+    waitingListRefreshInterval = setInterval(() => {
+      loadWaitingList().catch(e => console.error("Erreur auto-refresh:", e));
+    }, 30000); // 30 secondes
+    
+    console.log("✅ Auto-refresh de la liste d'attente activé (30s)");
+  }
+
+  // Arrêter l'auto-refresh de la liste d'attente
+  function stopAutoRefreshWaitingList() {
+    if (waitingListRefreshInterval) {
+      clearInterval(waitingListRefreshInterval);
+      waitingListRefreshInterval = null;
+      console.log("⏸️ Auto-refresh de la liste d'attente désactivé");
+    }
   }
 
   function selectFromWaiting(index) {
@@ -753,20 +992,30 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
     
+    // Chercher le collaborateur complet dans allCollaborateurs
+    const collaborateur = allCollaborateurs.find(c => c.matricule === personne.matricule);
+    
+    if (!collaborateur) {
+      console.error("⚠️ Collaborateur non trouvé dans la liste:", personne.matricule);
+      showMessage("❌ Collaborateur non trouvé", "error");
+      return;
+    }
+    
     // Vérifier que les éléments du formulaire existent
     if (!collaborateurSelect || !matriculeSpan || !nomPrenomSpan || !fonctionSpan || !rattachementSpan || !dateInput || !heureSortieInput) {
       console.error("⚠️ Éléments de formulaire manquants");
       return;
     }
     
-    // Remplir le formulaire
-    collaborateurSelect.value = JSON.stringify(personne);
+    // Remplir le collaborateurSelect avec le collaborateur complet
+    collaborateurSelect.value = JSON.stringify(collaborateur);
+    console.log("✅ Collaborateur sélectionné:", collaborateur);
     
     // Afficher les détails
-    matriculeSpan.textContent = personne.matricule;
-    nomPrenomSpan.textContent = personne.nom;
-    fonctionSpan.textContent = personne.fonction || "-";
-    rattachementSpan.textContent = personne.rattachement || "-";
+    matriculeSpan.textContent = collaborateur.matricule;
+    nomPrenomSpan.textContent = collaborateur.nom + (collaborateur.prenom ? " " + collaborateur.prenom : "");
+    fonctionSpan.textContent = collaborateur.fonction || "-";
+    rattachementSpan.textContent = collaborateur.rattachement || "-";
     
     // Remplir heure de sortie automatiquement
     const todayISO = getTodayMadagascar(); // Format YYYY-MM-DD
@@ -793,10 +1042,19 @@ document.addEventListener("DOMContentLoaded", function () {
     // ✅ AFFICHER LE FORMULAIRE
     formConsultation.style.display = "block";
 
-    // Retirer de la liste d'attente
-    waitingPersonnes.splice(index, 1);
-    saveWaitingList(); // Sauvegarder dans localStorage
-    updateWaitingList();
+    // Retirer de la liste d'attente (via API)
+    const matricule = waitingPersonnes[index]?.matricule;
+    if (matricule) {
+      fetch(`${API_URL}?action=removeFromWaiting&matricule=${encodeURIComponent(matricule)}`)
+        .then(r => r.json())
+        .then(result => {
+          if (result.success) {
+            // Recharger la liste d'attente depuis la base de données
+            loadWaitingList();
+          }
+        })
+        .catch(e => console.error("⚠️ Erreur suppression liste d'attente:", e));
+    }
 
     showMessage("✅ Personne sélectionnée, veuillez compléter le formulaire");
   }
@@ -1476,8 +1734,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!waitingTableBody || !completedTableBody) return;
 
     // Mettre à jour le nombre d'attente dans la section
-    if (waitingCount) {
-      waitingCount.textContent = allPending.length; // Nombre TOTAL
+    const pendingReturnCount = document.getElementById("pendingReturnCount");
+    if (pendingReturnCount) {
+      pendingReturnCount.textContent = allPending.length; // Nombre TOTAL en attente de retour
     }
 
     // Obtenir la date d'aujourd'hui au format YYYY-MM-DD

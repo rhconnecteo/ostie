@@ -88,6 +88,25 @@ function doGet(e) {
       const password = e.parameter.password;
       return output({ success: true, data: calculateConsultationRates(password) });
     }
+    if (action === "addToWaiting") {
+      const data = {
+        matricule: e.parameter.matricule,
+        nom: e.parameter.nom,
+        fonction: e.parameter.fonction,
+        rattachement: e.parameter.rattachement,
+        heureAjout: e.parameter.heureAjout
+      };
+      addToWaitingList(data);
+      return output({ success: true });
+    }
+    if (action === "getWaitingList") {
+      return output({ success: true, data: getWaitingList() });
+    }
+    if (action === "removeFromWaiting") {
+      const matricule = e.parameter.matricule;
+      removeFromWaitingList(matricule);
+      return output({ success: true });
+    }
     return output({ success: false, error: "Action inconnue" });
   } catch (err) {
     return output({ success: false, error: err.toString() });
@@ -697,6 +716,89 @@ function checkAndCloseAnomalies() {
     anomaliesDetail.forEach(a => {
       Logger.log("  - " + a.nom + ": Sortie " + a.sortie + " → Retour estimé " + a.retourEstime);
     });
+  }
+}
+
+// ================= WAITING LIST MANAGEMENT =================
+// Ajouter quelqu'un à la liste d'attente
+function addToWaitingList(data) {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    let sheet = ss.getSheetByName("Attentes");
+    
+    // Créer la feuille si elle n'existe pas
+    if (!sheet) {
+      sheet = ss.insertSheet("Attentes");
+      // Ajouter les headers
+      sheet.appendRow(["Matricule", "Nom", "Fonction", "Rattachement", "Heure d'ajout", "Date d'ajout"]);
+    }
+    
+    // Vérifier que les données sont valides
+    if (!data.matricule || !data.nom) {
+      throw new Error("Données invalides: matricule et nom requis");
+    }
+    
+    // Ajouter la ligne à la liste d'attente
+    const today = new Date().toLocaleDateString('fr-FR');
+    sheet.appendRow([
+      String(data.matricule),
+      String(data.nom),
+      String(data.fonction || ""),
+      String(data.rattachement || ""),
+      String(data.heureAjout || ""),
+      today
+    ]);
+    
+    Logger.log("✅ Personne ajoutée à la liste d'attente: " + data.matricule);
+  } catch (err) {
+    Logger.log("❌ Erreur addToWaitingList: " + err.toString());
+    throw err; // Relancer l'erreur pour que doGet la capture
+  }
+}
+
+// Récupérer la liste d'attente
+function getWaitingList() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName("Attentes");
+  
+  // Si la feuille n'existe pas, retourner un tableau vide
+  if (!sheet) {
+    return [];
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  
+  // Enlever le header
+  if (data.length > 1) {
+    data.shift();
+  }
+  
+  // Convertir en objets
+  return data.map(row => ({
+    matricule: row[0] || "",
+    nom: row[1] || "",
+    fonction: row[2] || "",
+    rattachement: row[3] || "",
+    heureAjout: row[4] || "",
+    dateAjout: row[5] || ""
+  }));
+}
+
+// Supprimer quelqu'un de la liste d'attente
+function removeFromWaitingList(matricule) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName("Attentes");
+  
+  if (!sheet) return;
+  
+  const data = sheet.getDataRange().getValues();
+  
+  // Chercher et supprimer la ligne avec le matricule
+  for (let i = data.length - 1; i >= 1; i--) { // Commencer à la fin et ignorer le header
+    if (data[i][0] === matricule) {
+      sheet.deleteRow(i + 1); // +1 car les index des données commencent à 0 mais les lignes à 1
+      break;
+    }
   }
 }
 

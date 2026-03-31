@@ -2,10 +2,21 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <title>Ostie - Consultation Collaborateur</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="script.js" defer></script>
+  <link rel="stylesheet" href="./style.css">
+  <!-- Favicon (SVG inline) -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23667eea'/><text x='50' y='65' font-size='50' fill='white' text-anchor='middle' font-family='Arial, sans-serif' font-weight='bold'>O</text></svg>">
+  <script src="./config.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <script src="./script.js" defer></script>
+  <!-- Fallback si CDN Chart.js échoue -->
+  <script>
+    if (typeof Chart === 'undefined') {
+      console.warn('Chart.js non chargé - fallback nécessaire');
+    }
+  </script>
 </head>
 <body>
 
@@ -32,7 +43,7 @@
 <div id="appPage" class="page">
   <div class="header-sticky">
     <nav class="navbar">
-      <img src="logo.png" alt="OSTIE Logo" class="navbar-logo">
+      <img src="logo.png" alt="OSTIE Logo" class="navbar-logo" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjNjY3ZWVhIiByeD0iNSIvPgogIDx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjI0IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkPigLlTVElFPC90ZXh0Pgo8L3N2Zz4='">
       <div class="nav-buttons">
         <button class="nav-btn active" data-section="formulaire">📋 Formulaire</button>
         <button class="nav-btn" data-section="dashboard">🔄 Suivi de retour</button>
@@ -249,7 +260,7 @@
 
       <!-- PERSONNES EN ATTENTE DE RETOUR -->
       <div class="pending-section">
-        <h3>⏳ Personnes en attente de retour</h3>
+        <h3>⏳ Personnes en attente de retour (<span id="pendingReturnCount">0</span>)</h3>
 
         <!-- TABLE 1 : EN ATTENTE DE RETOUR -->
         <h4 style="margin-top: 30px; margin-bottom: 15px; color: #333;">⏳ En attente de retour</h4>
