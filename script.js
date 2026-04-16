@@ -39,6 +39,8 @@ document.addEventListener("DOMContentLoaded", function () {
   // Elle sera chargée via loadWaitingList() après la connexion
   let waitingPersonnes = [];
   let waitingListRefreshInterval = null; // Pour l'auto-refresh
+  let isAddingToWaiting = false; // Debounce pour éviter les doublons
+  let selectingFromWaiting = false; // Debounce pour éviter les doublures de sélection
 
   // ================= SLOGANS & MOTTOS =================
   const slogans = [
@@ -318,6 +320,14 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
+    // Désactiver le bouton et afficher un message d'attente
+    const submitBtn = loginForm.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "⏳ Connexion en cours...";
+    }
+    loginError.textContent = "⏳ Connexion en cours...";
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
@@ -325,20 +335,24 @@ document.addEventListener("DOMContentLoaded", function () {
       }, API_TIMEOUT);
 
       try {
+        console.log("📡 Envoi requête login à:", API_URL);
         const response = await fetch(
           `${API_URL}?action=validateLogin&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
           { signal: controller.signal }
         );
         
         clearTimeout(timeoutId);
+        console.log("✅ Réponse login reçue, status:", response.status);
 
         if (!response.ok) {
           throw new Error(`Erreur serveur: ${response.status} ${response.statusText}`);
         }
 
         const result = await response.json();
+        console.log("📝 Résultat login:", result);
 
         if (result.success) {
+          console.log("✅ Login réussi!");
           isLoggedIn = true;
           userPassword = password;
           userType = result.type; // "OSTIE_ADMIN" ou "PRODUCTION_VIEWER"
@@ -348,17 +362,33 @@ document.addEventListener("DOMContentLoaded", function () {
           localStorage.setItem("userType", userType);
           localStorage.setItem("userPermissions", userPermissions);
           loginError.textContent = "";
+          
+          console.log("🔄 Basculement vers l'app...");
           loginPage.classList.remove("active");
           appPage.classList.add("active");
-          usernameInput.value = "";
-          passwordInput.value = "";
+          
+          // NE PAS effacer les champs tout de suite - attendre le chargement complet
+          // usernameInput.value = "";
+          // passwordInput.value = "";
+          
           showMessage("✅ Connecté avec succès!");
           
           // Adapter l'interface selon le type d'utilisateur
+          console.log("⚙️ Configuration interface pour:", userType);
           setupUIForUserType(userType, userPermissions);
           
-          loadCollaborateurs();
-          loadWaitingList(); // Charger la liste d'attente depuis la base de données
+          console.log("📥 Chargement collaborateurs et attente...");
+          await loadCollaborateurs();
+          await loadWaitingList(); // Charger la liste d'attente depuis la base de données
+          
+          // Charger le dashboard pour PRODUCTION_VIEWER aussi
+          if (userType === "PRODUCTION_VIEWER") {
+            await loadDashboardData();
+          }
+          
+          // MAINTENANT effacer les champs
+          usernameInput.value = "";
+          passwordInput.value = "";
           
           // Recharger la liste d'attente automatiquement toutes les 30 secondes
           startAutoRefreshWaitingList();
@@ -370,7 +400,7 @@ document.addEventListener("DOMContentLoaded", function () {
         clearTimeout(timeoutId);
       }
     } catch (err) {
-      console.error("Erreur login:", err);
+      console.error("❌ Erreur login:", err);
       let errorMsg = "❌ Erreur lors de la connexion";
       
       if (err.name === 'AbortError') {
@@ -382,6 +412,12 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       
       loginError.textContent = errorMsg;
+    } finally {
+      // Réactiver le bouton
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Se connecter";
+      }
     }
   });
 
@@ -436,7 +472,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (waitingSection) waitingSection.style.display = "block";
       
     } else if (type === "PRODUCTION_VIEWER" && permissions === "readonly") {
-      // Production Viewer: Suivi retour + Rapport + Ajout attente
+      // Production Viewer: Table détaillée des personnes en attente de retour dans le Dashboard
       
       // Afficher boutons: Ajouter en attente, Dashboard, Rapport
       navBtns.forEach(btn => {
@@ -451,7 +487,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       });
       
-      // Afficher le Dashboard par défaut (override plus tard si on veut)
+      // Afficher le Dashboard par défaut
       sections.forEach(s => s.classList.remove("active"));
       if (dashboardSection) dashboardSection.classList.add("active");
       
@@ -478,9 +514,192 @@ document.addEventListener("DOMContentLoaded", function () {
       // ✅ Afficher la section des personnes en attente
       if (waitingSection) waitingSection.style.display = "block";
       
+      // ======================= DASHBOARD: PRODUCTION_VIEWER VOIR SEULEMENT LA TABLE D'ATTENTE =======================
+      
+      // ❌ Masquer TOUTES les cartes statistiques
+      const statsContainer = dashboardSection?.querySelector('.stats-container');
+      if (statsContainer) statsContainer.style.display = "none";
+      
+      dashboardSection?.querySelectorAll('.stat-card').forEach(card => {
+        card.style.display = "none";
+      });
+      
+      // ❌ Masquer les GRAPHIQUES (Chart.js canvases)
+      dashboardSection?.querySelectorAll('canvas').forEach(canvas => {
+        canvas.style.display = "none";
+        if (canvas.parentElement) {
+          canvas.parentElement.style.display = "none";
+        }
+      });
+      
+      // ❌ Masquer la grille des graphiques entière
+      const chartsGrid = dashboardSection?.querySelector('.charts-grid');
+      if (chartsGrid) {
+        chartsGrid.style.display = "none";
+      }
+      
+      // ❌ Masquer les conteneurs de graphiques individuels
+      const chartContainers = dashboardSection?.querySelectorAll('.chart-container');
+      if (chartContainers) {
+        chartContainers.forEach(el => {
+          el.style.display = "none";
+        });
+      }
+      
+      // ❌ Masquer la section des cartes de rattachement COMPLÈTEMENT
+      const rattachementCardsSection = document.getElementById("rattachementCardsSection");
+      if (rattachementCardsSection) {
+        rattachementCardsSection.style.display = "none !important";
+      }
+      
+      // ❌ Masquer TOUTES les cartes colorées (Contact Center, Consulte, etc.)
+      dashboardSection?.querySelectorAll('.card').forEach(card => {
+        card.style.display = "none";
+      });
+      
+      // ❌ Masquer tous les éléments avec la classe card-* ou rattachement*
+      dashboardSection?.querySelectorAll('[class*="card-"], [class*="rattachement"]').forEach(el => {
+        if (el.tagName !== 'TABLE' && !el.querySelector('table')) {
+          el.style.display = "none";
+        }
+      });
+      
+      // ❌ Masquer les conteneurs de graphiques par ID
+      const chartContainersById = dashboardSection?.querySelectorAll('[id*="chart"], [class*="chart"]');
+      if (chartContainersById) {
+        chartContainersById.forEach(el => {
+          el.style.display = "none";
+        });
+      }
+      
       // ❌ Cacher le bouton "Vérifier les anomalies"
       const btnCheckAnomalies = document.getElementById("btnCheckAnomalies");
       if (btnCheckAnomalies) btnCheckAnomalies.style.display = "none";
+      const btnCheckAnomaliesContainer = btnCheckAnomalies?.parentElement;
+      if (btnCheckAnomaliesContainer) btnCheckAnomaliesContainer.style.display = "none";
+      
+      // ❌ Masquer toutes les tables sauf celle de l'attente (suivi des retours)
+      // S'assurer que pending-section est visible
+      const pendingSectionDiv = document.querySelector('.pending-section');
+      if (pendingSectionDiv) {
+        pendingSectionDiv.style.display = "block !important";
+        
+        // Afficher le tableau de l'attente
+        const waitingTable = pendingSectionDiv.querySelector('#pendingWaitingTable');
+        if (waitingTable) {
+          waitingTable.style.display = "table !important";
+          console.log("✅ Table d'attente affichée");
+        }
+        
+        // Afficher aussi le conteneur
+        const tableContainers = pendingSectionDiv.querySelectorAll('.table-container');
+        tableContainers.forEach((container, idx) => {
+          container.style.display = "block !important";
+          console.log(`✅ Table container ${idx} affichée`);
+        });
+      }
+      
+      // Masquer les autres conteneurs en dehors de pending-section
+      const allOtherContainers = dashboardSection?.querySelectorAll('.table-container');
+      if (allOtherContainers) {
+        allOtherContainers.forEach(el => {
+          if (!pendingSectionDiv?.contains(el)) {
+            el.style.display = "none";
+          }
+        });
+      }
+      
+      // ❌ Masquer les tables complétées
+      const completedTables = dashboardSection?.querySelectorAll('[id*="completedTable"], [id*="completed"]');
+      if (completedTables) {
+        completedTables.forEach(el => {
+          el.style.display = "none";
+        });
+      }
+      
+      // ❌ Cacher "Consultations d'Aujourd'hui" (section + filtres)
+      const todayConsultationsSection = document.querySelector('.today-consultations-section');
+      if (todayConsultationsSection) todayConsultationsSection.style.display = "none";
+      
+      // ❌ Masquer le h4 "Déjà retournée" et sa table
+      const h4Headers = dashboardSection?.querySelectorAll('h4');
+      if (h4Headers) {
+        h4Headers.forEach(h4 => {
+          const text = h4.textContent.toLowerCase();
+          if (text.includes("retournée") || text.includes("completed")) {
+            h4.style.display = "none";
+            // Masquer aussi le conteneur suivant (la table)
+            let next = h4.nextElementSibling;
+            while (next && !next.matches('h4')) {
+              if (next.classList.contains('table-container') || next.tagName === 'TABLE') {
+                next.style.display = "none";
+              }
+              next = next.nextElementSibling;
+            }
+          }
+        });
+      }
+      
+      // ✅ Afficher et renommer le titre "Suivi des Retours"
+      const pendingSection = document.querySelector('.pending-section');
+      if (pendingSection) {
+        // Trouver et afficher/renommer le h3
+        const h3InPending = pendingSection.querySelector('h3');
+        if (h3InPending) {
+          h3InPending.textContent = "👥 Suivi des Retours - Détails Complets";
+          h3InPending.style.display = "block";
+        }
+        pendingSection.style.display = "block";
+        
+        // ✅ Afficher le h4 "En attente" qui précède la table
+        const h4InPending = pendingSection.querySelector('h4');
+        if (h4InPending) {
+          h4InPending.style.display = "block !important";
+          h4InPending.textContent = "👥 Détails des Personnes en Attente de Retour";
+          console.log("✅ H4 'En attente' affichée");
+        }
+      }
+      
+      // ❌ Masquer TOUS les h3 dans le dashboard (pas les h4 du tableau)
+      dashboardSection?.querySelectorAll('h3').forEach(h3 => {
+        if (!pendingSection?.contains(h3)) {
+          h3.style.display = "none";
+        }
+      });
+      
+      // ❌ Masquer les h4 "Déjà retournée" 
+      dashboardSection?.querySelectorAll('h4').forEach(h4 => {
+        if (h4.textContent.includes("Déjà retournée") || h4.textContent.includes("completed")) {
+          h4.style.display = "none";
+          // Masquer aussi le conteneur suivant (la table)
+          let next = h4.nextElementSibling;
+          while (next && !next.matches('h4')) {
+            if (next.classList.contains('table-container') || next.tagName === 'TABLE') {
+              next.style.display = "none";
+            }
+            next = next.nextElementSibling;
+          }
+        }
+      });
+      
+      // ❌ Masquer les tabs de rapport (seulement "Rapport" visible)
+      const rapportTabs = document.querySelectorAll(".rapport-tab-btn");
+      rapportTabs.forEach(tab => {
+        const target = tab.getAttribute('data-target');
+        if (target !== "rapport-consultations") {
+          tab.style.display = "none";
+        } else {
+          tab.style.display = "inline-block";
+        }
+      });
+      
+      // ❌ Masquer les sections des rapports complexes
+      const rapportSections = document.querySelectorAll(".rapport-section-content");
+      rapportSections.forEach(section => {
+        if (section.id !== "rapport-consultations") {
+          section.style.display = "none !important";
+        }
+      });
     }
   }
 
@@ -575,7 +794,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Accepté - restoration automatique de la session
   if (isLoggedIn && userPassword && userType && userPermissions) {
     console.log("🔄 Auto-login détecté - Restauration de la session");
-    console.log("📋 Liste d'attente avant restore:", waitingPersonnes.length, "personne(s)");
+    console.log("📋 Liste d'attente avant restore:", Array.isArray(waitingPersonnes) ? waitingPersonnes.length : 0, "personne(s)");
     
     // IMPORTANT: S'assurer que les éléments DOM sont prêts avant de mettre à jour
     setTimeout(() => {
@@ -583,8 +802,8 @@ document.addEventListener("DOMContentLoaded", function () {
       appPage.classList.add("active");
       setupUIForUserType(userType, userPermissions);
       
-      // Afficher la liste d'attente si elle existe
-      if (waitingPersonnes.length > 0) {
+      // Afficher la liste d'attente si elle existe  
+      if (Array.isArray(waitingPersonnes) && waitingPersonnes.length > 0) {
         updateWaitingList();
         console.log("📋 Liste d'attente affichée:", waitingPersonnes.length, "personne(s)");
       }
@@ -715,11 +934,20 @@ document.addEventListener("DOMContentLoaded", function () {
   // ================= AJOUTER À LA LISTE D'ATTENTE =================
   if (btnAddToWaiting) {
     btnAddToWaiting.addEventListener("click", async function () {
+      // Debounce: empêcher les doubles clics
+      if (isAddingToWaiting) {
+        showMessage("⏳ Ajout en cours... Patientez", "warning");
+        return;
+      }
+      
       if (!collaborateurSelect.value) {
         showMessage("❌ Sélectionnez un collaborateur", "error");
         return;
       }
 
+      isAddingToWaiting = true;
+      btnAddToWaiting.disabled = true;
+      
       try {
         const c = JSON.parse(collaborateurSelect.value);
         console.log("1️⃣ Collaborateur sélectionné:", c);
@@ -736,14 +964,15 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
-        // Obtenir l'heure actuelle
+        // Obtenir l'heure actuelle CORRECTE (timezone locale)
         const now = new Date();
         const heureAjout = String(now.getHours()).padStart(2, "0") + ":" + 
                           String(now.getMinutes()).padStart(2, "0");
         console.log("2️⃣ Heure d'ajout:", heureAjout);
 
         // Construire l'URL avec le password pour vérification
-        const url = `${API_URL}?action=addToWaiting&password=${encodeURIComponent(userPassword)}&matricule=${encodeURIComponent(c.matricule)}&nom=${encodeURIComponent(c.nom)}&fonction=${encodeURIComponent(c.fonction || "")}&rattachement=${encodeURIComponent(c.rattachement || "")}&heureAjout=${heureAjout}`;
+        const pwd = userPassword || localStorage.getItem("userPassword") || "";
+        const url = `${API_URL}?action=addToWaiting&password=${encodeURIComponent(pwd)}&matricule=${encodeURIComponent(c.matricule)}&nom=${encodeURIComponent(c.nom)}&fonction=${encodeURIComponent(c.fonction || "")}&rattachement=${encodeURIComponent(c.rattachement || "")}&heureAjout=${heureAjout}`;
         console.log("3️⃣ URL API:", url);
 
         // Ajouter à la base de données via l'API
@@ -787,6 +1016,10 @@ document.addEventListener("DOMContentLoaded", function () {
         console.error("❌ Erreur lors de l'ajout à la liste d'attente:", e.message);
         console.error("Stack trace:", e.stack);
         showMessage(`❌ Erreur: ${e.message}`, "error");
+      } finally {
+        // Réinitialiser le debounce
+        isAddingToWaiting = false;
+        btnAddToWaiting.disabled = false;
       }
     });
   }
@@ -969,6 +1202,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Nettoyer automatiquement les attentes de plus d'un jour
   async function cleanExpiredWaiting() {
+    // Vérifier que waitingPersonnes existe
+    if (typeof waitingPersonnes === 'undefined' || !Array.isArray(waitingPersonnes)) {
+      console.warn("⚠️ waitingPersonnes non disponible");
+      return;
+    }
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -1036,6 +1275,11 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function selectFromWaiting(index) {
+    // Debounce: empêcher les sélections multiples rapides
+    if (selectingFromWaiting) {
+      return;
+    }
+    
     if (index < 0 || index >= waitingPersonnes.length) {
       console.error("⚠️ Index invalide pour selectFromWaiting:", index);
       return;
@@ -1061,6 +1305,8 @@ document.addEventListener("DOMContentLoaded", function () {
       console.error("⚠️ Éléments de formulaire manquants");
       return;
     }
+    
+    selectingFromWaiting = true;
     
     // Remplir le collaborateurSelect avec le collaborateur complet
     collaborateurSelect.value = JSON.stringify(collaborateur);
@@ -1099,19 +1345,9 @@ document.addEventListener("DOMContentLoaded", function () {
       formConsultation.style.display = "block";
     }
 
-    // Retirer de la liste d'attente (via API)
-    const matricule = waitingPersonnes[index]?.matricule;
-    if (matricule) {
-      fetch(`${API_URL}?action=removeFromWaiting&matricule=${encodeURIComponent(matricule)}`)
-        .then(r => r.json())
-        .then(result => {
-          if (result.success) {
-            // Recharger la liste d'attente depuis la base de données
-            loadWaitingList();
-          }
-        })
-        .catch(e => console.error("⚠️ Erreur suppression liste d'attente:", e));
-    }
+    // ⚠️ IMPORTANT: NE PAS retirer de la liste d'attente à la sélection
+    // Le collaborateur sera retiré APRÈS l'enregistrement du formulaire
+    selectingFromWaiting = false;
 
     showMessage("✅ Personne sélectionnée, veuillez compléter le formulaire");
   }
@@ -1150,7 +1386,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const params = new URLSearchParams({
       action: "saveConsultation",
-      password: userPassword,
+      password: userPassword || localStorage.getItem("userPassword") || "",
       matricule: c.matricule,
       nom: c.nom,
       prenom: c.prenom || "",
@@ -1177,6 +1413,27 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (json.success) {
         showMessage("✅ Enregistré avec succès !");
+        
+        // ✅ Retirer de la liste d'attente APRÈS enregistrement
+        const matricule = c.matricule;
+        if (matricule) {
+          const pwd = userPassword || localStorage.getItem("userPassword") || "";
+          console.log("🗑️ Suppression de la liste d'attente:", matricule);
+          
+          fetch(`${API_URL}?action=removeFromWaiting&password=${encodeURIComponent(pwd)}&matricule=${encodeURIComponent(matricule)}`)
+            .then(r => r.json())
+            .then(result => {
+              if (result.success) {
+                console.log("✅ Retiré de la liste d'attente");
+                // Recharger la liste d'attente depuis la base de données
+                loadWaitingList();
+              } else {
+                console.warn("⚠️ removeFromWaiting non-succès:", result);
+              }
+            })
+            .catch(e => console.error("⚠️ Erreur suppression liste d'attente:", e));
+        }
+        
         resetForm();
         // Recharger les consultations pour mettre à jour la liste en cache
         await loadDashboardData();
@@ -1256,8 +1513,16 @@ document.addEventListener("DOMContentLoaded", function () {
   // ================= DASHBOARD =================
   async function loadDashboardData() {
     try {
-      console.log("🔄 Chargement dashboard - userPassword:", userPassword, "userType:", userType);
-      const res = await fetch(`${API_URL}?action=getConsultations&password=${encodeURIComponent(userPassword)}`);
+      // Vérifier que userPassword est défini (le récupérer du localStorage si nécessaire)
+      const pwd = userPassword || localStorage.getItem("userPassword") || "";
+      if (!pwd) {
+        console.error("❌ userPassword non trouvé!");
+        showMessage("❌ Erreur: session invalide. Veuillez vous reconnecter.", "error");
+        return;
+      }
+      
+      console.log("🔄 Chargement dashboard - userPassword:", pwd, "userType:", userType);
+      const res = await fetch(`${API_URL}?action=getConsultations&password=${encodeURIComponent(pwd)}`);
       const json = await res.json();
       
       console.log("✅ Réponse API:", json);
@@ -1277,6 +1542,14 @@ document.addEventListener("DOMContentLoaded", function () {
       console.log("🎯 Données filtrées:", filteredData.length);
       
       updateStatistics();
+      
+      // PRODUCTION_VIEWER: charger la liste d'attente détaillée
+      if (userType === "PRODUCTION_VIEWER") {
+        updatePendingList(); // Afficher les personnes en attente de retour
+        return;
+      }
+      
+      // OSTIE_ADMIN: charger tout
       updateCharts();
       updatePendingList();
       updateTodayConsultationsTable(); // Afficher la table des consultations du jour
@@ -1685,7 +1958,13 @@ document.addEventListener("DOMContentLoaded", function () {
    * @returns {Array} Consultations sans heure de retour enregistrée
    */
   function getPendingConsultations() {
-    // Retourne toutes les consultations qui ont une heure de sortie (en attente OU complétées)
+    // Pour PRODUCTION_VIEWER: afficher TOUTES les consultations
+    if (userType === "PRODUCTION_VIEWER") {
+      console.log("🔍 PRODUCTION_VIEWER mode: on affiche toutes les consultations");
+      return allConsultations || [];
+    }
+    
+    // Pour OSTIE_ADMIN: retourner seulement celles avec heure de sortie (en attente OU complétées)
     return allConsultations.filter(c => {
       const heureSortie = c.heureSortie || c.heure_sortie || "";
       return heureSortie && heureSortie.trim() !== "";
@@ -1783,12 +2062,27 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ================= UPDATE PENDING LIST =================
   function updatePendingList() {
+    console.log("📋 updatePendingList appelée - userType:", userType);
+    console.log("📊 allConsultations disponibles?", allConsultations, "Length:", allConsultations?.length);
+    
     const allPending = getPendingConsultations(); // TOUS les en attente
+    console.log("📊 Tous les en attente de sortie:", allPending.length);
+    console.log("🔍 Détail allPending:", allPending);
+    
     const filteredPending = filterByDomain(allPending); // Filtrés par domaine
+    console.log("🎯 En attente filtrés par domaine:", filteredPending.length);
+    console.log("🔍 Détail filteredPending:", filteredPending);
     
     const waitingTableBody = document.getElementById("pendingWaitingTableBody");
     const completedTableBody = document.getElementById("pendingCompletedTableBody");
-    if (!waitingTableBody || !completedTableBody) return;
+    
+    console.log("✅ waitingTableBody trouvé?", !!waitingTableBody);
+    console.log("✅ completedTableBody trouvé?", !!completedTableBody);
+    
+    if (!waitingTableBody || !completedTableBody) {
+      console.error("❌ Éléments DOM manquants! waitingTableBody:", waitingTableBody, "completedTableBody:", completedTableBody);
+      return;
+    }
 
     // Mettre à jour le nombre d'attente dans la section
     const pendingReturnCount = document.getElementById("pendingReturnCount");
@@ -1800,7 +2094,31 @@ document.addEventListener("DOMContentLoaded", function () {
     const todayDate = getTodayMadagascar();
 
     // Séparer en deux listes : en attente et complétée
-    const waitingList = filteredPending.filter(c => !(c.heureRetour && c.resultat));
+    let waitingList = filteredPending.filter(c => !(c.heureRetour && c.resultat));
+    console.log("⏳ En attente de retour (sans heure retour ni résultat):", waitingList.length);
+    
+    // Pour PRODUCTION_VIEWER: afficher SEULEMENT les collaborateurs d'aujourd'hui SANS heure de retour
+    if (userType === "PRODUCTION_VIEWER") {
+      console.log("🔍 PRODUCTION_VIEWER: affichage des collaborateurs EN ATTENTE (sans retour) d'aujourd'hui");
+      console.log("📅 Date d'aujourd'hui:", todayDate);
+      
+      // Filtrer pour afficher seulement:
+      // 1. Les consultations d'aujourd'hui
+      // 2. Qui N'ONT PAS d'heure de retour
+      waitingList = filteredPending.filter(c => {
+        const consultationDate = extractAndCorrectDate(c.date);
+        const hasReturn = c.heureRetour && c.heureRetour.trim() !== "";
+        const isToday = consultationDate === todayDate;
+        const isWaiting = !hasReturn; // N'a PAS d'heure de retour
+        
+        const match = isToday && isWaiting;
+        console.log(`  ${c.nom || "?"} - Date: ${consultationDate}, IsToday: ${isToday}, HasReturn: ${hasReturn}, Match: ${match}`);
+        return match;
+      });
+      
+      console.log("✅ Collaborateurs en attente d'aujourd'hui (sans retour):", waitingList.length);
+    }
+    
     const completedList = filteredPending.filter(c => {
       // Complétée = heure retour + résultat + DATE D'AUJOURD'HUI
       if (!(c.heureRetour && c.resultat)) return false;
@@ -1809,7 +2127,109 @@ document.addEventListener("DOMContentLoaded", function () {
       const consultationDate = extractAndCorrectDate(c.date);
       return consultationDate === todayDate;
     });
+    console.log("✅ Complétées aujourd'hui:", completedList.length);
 
+    // ===== POUR PRODUCTION_VIEWER: TABLE SIMPLIFIÉE ET DÉTAILLÉE =====
+    if (userType === "PRODUCTION_VIEWER") {
+      console.log("🔧 Mode PRODUCTION_VIEWER - Affichage table simplifiée");
+      
+      const pendingWaitingTable = document.getElementById("pendingWaitingTable");
+      const pendingCompletedTable = document.getElementById("pendingCompletedTable");
+      const tableFilters = document.querySelectorAll(".table-filter-row");
+      const sortHeaders = document.querySelectorAll(".sortable-header");
+      
+      console.log("🔧 pendingWaitingTable trouvé?", !!pendingWaitingTable);
+      console.log("🔧 pendingCompletedTable trouvé?", !!pendingCompletedTable);
+      
+      // S'assurer que la section est visible
+      const pendingSection = document.querySelector(".pending-section");
+      if (pendingSection) {
+        pendingSection.style.display = "block";
+        console.log("✅ Section 'pending-section' affichée");
+      }
+      
+      // Adapter les en-têtes pour PRODUCTION_VIEWER
+      const thead = pendingWaitingTable?.querySelector("thead tr:first-child");
+      if (thead) {
+        // Réinitialiser les en-têtes avec seulement 8 colonnes
+        thead.innerHTML = `
+          <th>Matricule</th>
+          <th>Nom & Prénom</th>
+          <th>Fonction</th>
+          <th>Rattachement</th>
+          <th>Type Consultation</th>
+          <th>Lieu</th>
+          <th>Date</th>
+          <th>Heure Sortie</th>
+        `;
+        console.log("✅ En-têtes adaptés pour PRODUCTION_VIEWER");
+      }
+      
+      // Masquer les filtres pour PRODUCTION_VIEWER
+      tableFilters.forEach(tr => tr.style.display = "none");
+      console.log("✅ Filtres masqués - nombre:", tableFilters.length);
+      
+      waitingTableBody.innerHTML = "";
+      
+      if (waitingList.length === 0) {
+        console.log("ℹ️ Aucune personne en attente de retour");
+        waitingTableBody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #27ae60; font-weight: bold;">✓ Aucune personne en attente de retour !</td></tr>';
+      } else {
+        console.log("📝 Affichage de", waitingList.length, "personnes en attente");
+        
+        waitingList.forEach((c, idx) => {
+          console.log(`  ${idx + 1}. ${c.matricule} - ${c.nom} (Sortie: ${c.heureSortie})`);
+          
+          const row = document.createElement("tr");
+          
+          // Fallbacks pour les noms de propriétés alternatifs
+          const nom = c.nom || c.Nom || c.NAME || "";
+          const matricule = c.matricule || c.Matricule || c.MATRICULE || "";
+          const prenom = c.prenom || c.Prenom || c.PRENOM || "";
+          const fonction = c.fonction || c.Fonction || c.FONCTION || "";
+          const rattachement = c.rattachement || c.Rattachement || c.RATTACHEMENT || c.serc || c.Serc || c.domaine || "";
+          const typeConsultation = c.typeConsultation || c.TypeConsultation || c.TYPE_CONSULTATION || c.Type || "";
+          const lieu = c.lieuConsultation || c.LieuConsultation || c.LIEU_CONSULTATION || c.Lieu || "";
+          const date = c.date || c.Date || c.DATE || "";
+          const heureSortie = c.heureSortie || c.HeureSortie || c.HEURE_SORTIE || c.heure_sortie || "";
+          
+          row.innerHTML = `
+            <td class="prod-matricule"><strong>${matricule}</strong></td>
+            <td class="prod-nom"><strong>${nom} ${prenom}</strong></td>
+            <td class="prod-fonction">${fonction || "-"}</td>
+            <td class="prod-rattachement">${rattachement || "-"}</td>
+            <td class="prod-type">${typeConsultation || "-"}</td>
+            <td class="prod-lieu">${lieu || "-"}</td>
+            <td class="prod-date">${extractAndCorrectDate(date) || "-"}</td>
+            <td class="prod-heure">${extractTimeFromISO(heureSortie) || "-"}</td>
+          `;
+          
+          waitingTableBody.appendChild(row);
+        });
+      }
+      
+      // Masquer la table des complétées
+      if (pendingCompletedTable?.parentElement) {
+        pendingCompletedTable.parentElement.style.display = "none";
+      }
+      
+      // Modifier les titres
+      const h4s = document.querySelectorAll("h4");
+      h4s.forEach(h4 => {
+        if (h4.textContent.includes("En attente")) {
+          h4.textContent = "👥 Détails des Personnes en Attente de Retour";
+          h4.style.color = "#667eea";
+          h4.style.fontWeight = "700";
+          h4.style.fontSize = "18px";
+        } else if (h4.textContent.includes("Déjà retournée")) {
+          h4.style.display = "none";
+        }
+      });
+      
+      return;
+    }
+
+    // ===== POUR OSTIE_ADMIN: TABLE AVEC ACTIONS =====
     // ===== AFFICHER TABLE "EN ATTENTE" =====
     waitingTableBody.innerHTML = "";
     if (waitingList.length === 0) {
@@ -3698,4 +4118,4 @@ document.addEventListener("DOMContentLoaded", function () {
     return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0");
   }
 
-});
+}); // ✅ Fermeture du addEventListener("DOMContentLoaded", function () { ... })
