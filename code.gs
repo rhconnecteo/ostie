@@ -21,6 +21,54 @@ const LOGIN_CONFIG = {
   }
 };
 
+// ================= HELPER: GET USER TYPE FROM PASSWORD =================
+function getUserTypeFromPassword(password) {
+  for (const key in LOGIN_CONFIG) {
+    const config = LOGIN_CONFIG[key];
+    if (config.password === password) {
+      return config.type;
+    }
+  }
+  return null;
+}
+
+// ================= HELPER: CHECK ACTION PERMISSIONS =================
+// Actions autorisées pour PRODUCTION_VIEWER:
+// - addToWaiting (ajout à l'attente)
+// - getWaitingList (lecture liste d'attente)
+// - getCollaborateurs (lecture collaborateurs)
+// - getCartes (lecture dashboards)
+// - getConsultations (lecture consultations en lecture seule)
+// - getConsultationRates (lecture taux de consultation)
+// 
+// Actions INTERDITES pour PRODUCTION_VIEWER:
+// - saveConsultation
+// - setRetour
+// - removeFromWaiting
+// - checkAnomalies
+function isActionAllowed(userType, action) {
+  const allowedForProductionViewer = [
+    "addToWaiting",
+    "getWaitingList",
+    "getCollaborateurs",
+    "getCartes",
+    "getConsultations",
+    "getConsultationRates"
+  ];
+  
+  // OSTIE_ADMIN can do everything
+  if (userType === "OSTIE_ADMIN") {
+    return true;
+  }
+  
+  // PRODUCTION_VIEWER has limited actions
+  if (userType === "PRODUCTION_VIEWER") {
+    return allowedForProductionViewer.includes(action);
+  }
+  
+  return false;
+}
+
 // ================= DO GET =================
 function doGet(e) {
   // Guard: Si doGet est appelée sans paramètres (test direct), créer un objet vide
@@ -44,6 +92,13 @@ function doGet(e) {
       return output({ success: true, data: getCollaborateurs() });
     }
     if (action === "saveConsultation") {
+      const password = e.parameter.password;
+      const userType = getUserTypeFromPassword(password);
+      
+      if (!isActionAllowed(userType, action)) {
+        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission d'ajouter une consultation" });
+      }
+      
       const data = {
         matricule: e.parameter.matricule,
         nom: e.parameter.nom,
@@ -68,6 +123,13 @@ function doGet(e) {
       return output({ success: true, data: getConsultations(password) });
     }
     if (action === "setRetour") {
+      const password = e.parameter.password;
+      const userType = getUserTypeFromPassword(password);
+      
+      if (!isActionAllowed(userType, action)) {
+        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission de modifier le retour" });
+      }
+      
       const data = {
         matricule: e.parameter.matricule,
         heureRetour: e.parameter.heureRetour,
@@ -81,6 +143,13 @@ function doGet(e) {
       return output({ success: true });
     }
     if (action === "checkAnomalies") {
+      const password = e.parameter.password;
+      const userType = getUserTypeFromPassword(password);
+      
+      if (!isActionAllowed(userType, action)) {
+        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission de vérifier les anomalies" });
+      }
+      
       checkAndCloseAnomalies();
       return output({ success: true, message: "Vérification anomalies effectuée" });
     }
@@ -89,6 +158,13 @@ function doGet(e) {
       return output({ success: true, data: calculateConsultationRates(password) });
     }
     if (action === "addToWaiting") {
+      const password = e.parameter.password;
+      const userType = getUserTypeFromPassword(password);
+      
+      if (!isActionAllowed(userType, action)) {
+        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission d'ajouter à la liste d'attente" });
+      }
+      
       const data = {
         matricule: e.parameter.matricule,
         nom: e.parameter.nom,
@@ -103,6 +179,13 @@ function doGet(e) {
       return output({ success: true, data: getWaitingList() });
     }
     if (action === "removeFromWaiting") {
+      const password = e.parameter.password;
+      const userType = getUserTypeFromPassword(password);
+      
+      if (!isActionAllowed(userType, action)) {
+        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission de supprimer de la liste d'attente" });
+      }
+      
       const matricule = e.parameter.matricule;
       removeFromWaitingList(matricule);
       return output({ success: true });

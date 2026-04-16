@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Utiliser la configuration du fichier config.js
   const API_URL = (typeof CONFIG !== 'undefined' && CONFIG.API_URL) 
     ? CONFIG.API_URL 
-    :"https://script.google.com/macros/s/AKfycbyMdarl7vUC2Ivh_Yk86EcLSfzsdMWy7tFAv0E6C04nh_HdokjRsCDfpMG4HMrX4_bl5Q/exec";
+    :"https://script.google.com/macros/s/AKfycbzS1B0dowwGiPfB3AVSITzf-iCXevd27tBPlOUDoKKFbTsVaXy9p6T1LFZwcIxYXrUhOA/exec";
   
   const API_TIMEOUT = (typeof CONFIG !== 'undefined' && CONFIG.API_TIMEOUT) 
     ? CONFIG.API_TIMEOUT 
@@ -406,6 +406,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const formulaireSection = document.getElementById("formulaire");
     const dashboardSection = document.getElementById("dashboard");
     const rapportSection = document.getElementById("rapport");
+    const formConsultation = document.getElementById("formConsultation");
+    const detailsCollaborateur = document.getElementById("detailsCollaborateur");
+    const waitingSection = document.getElementById("waitingSection");
 
     // Déterminer les rattachements autorisés
     authorizedRattachements = []; // Tous les rattachements pour les deux types
@@ -426,30 +429,56 @@ document.addEventListener("DOMContentLoaded", function () {
       // ✅ Afficher le bouton "Vérifier les anomalies" pour OSTIE
       const btnCheckAnomalies = document.getElementById("btnCheckAnomalies");
       if (btnCheckAnomalies) btnCheckAnomalies.style.display = "block";
-    } else if (type === "PRODUCTION_VIEWER" && permissions === "readonly") {
-      // Lecteur Production: voir SEULEMENT dashboard et rapport (SANS formulaire)
-      // Ne pas mettre display:none en inline - laisser les CSS rules gérer via .active
       
-      // Cacher le bouton Formulaire de la nav, afficher Dashboard et Rapport
+      // Afficher tous les éléments du formulaire
+      if (formConsultation) formConsultation.style.display = "none"; // Caché jusqu'au choix d'un collaborateur
+      if (detailsCollaborateur) detailsCollaborateur.style.display = "block";
+      if (waitingSection) waitingSection.style.display = "block";
+      
+    } else if (type === "PRODUCTION_VIEWER" && permissions === "readonly") {
+      // Production Viewer: Suivi retour + Rapport + Ajout attente
+      
+      // Afficher boutons: Ajouter en attente, Dashboard, Rapport
       navBtns.forEach(btn => {
         const section = btn.dataset.section;
         if (section === "formulaire") {
-          btn.style.display = "none";
+          btn.style.display = "inline-block";  // Afficher mais renommé
+          btn.textContent = "⏳ Ajouter en Attente";  // Renommer le bouton
+        } else if (section === "dashboard" || section === "rapport") {
+          btn.style.display = "inline-block";  // Afficher Dashboard et Rapport
         } else {
-          btn.style.display = "inline-block";
+          btn.style.display = "inline-block";  // Garder Déconnexion
         }
       });
       
-      // Afficher le dashboard par défaut
+      // Afficher le Dashboard par défaut (override plus tard si on veut)
       sections.forEach(s => s.classList.remove("active"));
       if (dashboardSection) dashboardSection.classList.add("active");
       
-      // Sélectionner le bouton "Dashboard" dans la nav
+      // Sélectionner le bouton Dashboard
       navBtns.forEach(b => b.classList.remove("active"));
       const dashboardBtn = document.querySelector('[data-section="dashboard"]');
       if (dashboardBtn) dashboardBtn.classList.add("active");
       
-      // ❌ Cacher le bouton "Vérifier les anomalies" pour Production
+      // Modifier les titres de la section formulaire pour PRODUCTION_VIEWER
+      if (formulaireSection) {
+        const h2 = formulaireSection.querySelector('h2');
+        if (h2) h2.textContent = "⏳ Ajouter Collaborateurs en Attente";
+        
+        const subtitle = formulaireSection.querySelector('.section-subtitle');
+        if (subtitle) subtitle.textContent = "Sélectionnez un collaborateur et cliquez sur 'Ajouter à l'attente'";
+      }
+      
+      // ✅ Afficher les détails du collaborateur
+      if (detailsCollaborateur) detailsCollaborateur.style.display = "block";
+      
+      // ❌ Cacher le formulaire de consultation complet
+      if (formConsultation) formConsultation.style.display = "none";
+      
+      // ✅ Afficher la section des personnes en attente
+      if (waitingSection) waitingSection.style.display = "block";
+      
+      // ❌ Cacher le bouton "Vérifier les anomalies"
       const btnCheckAnomalies = document.getElementById("btnCheckAnomalies");
       if (btnCheckAnomalies) btnCheckAnomalies.style.display = "none";
     }
@@ -481,6 +510,12 @@ document.addEventListener("DOMContentLoaded", function () {
       if (sectionName === "rapport") {
         // Charger tous les consultations du rapport (filtrés par domaine)
         displayReport(filterByDomain(allConsultations));
+      }
+      
+      // Pour PRODUCTION_VIEWER, masquer le formulaire de consultation complètement
+      if (sectionName === "formulaire" && userType === "PRODUCTION_VIEWER") {
+        const formConsultation = document.getElementById("formConsultation");
+        if (formConsultation) formConsultation.style.display = "none";
       }
     });
   });
@@ -599,7 +634,10 @@ document.addEventListener("DOMContentLoaded", function () {
     commentairesRow.style.display = "none";
     commentairesInput.value = "";
 
-    formConsultation.style.display = "block";
+    // Afficher le formulaire SEULEMENT pour OSTIE_ADMIN, pas pour PRODUCTION_VIEWER
+    if (userType === "OSTIE_ADMIN") {
+      formConsultation.style.display = "block";
+    }
     setDateTimeNow();
   });
 
@@ -704,8 +742,8 @@ document.addEventListener("DOMContentLoaded", function () {
                           String(now.getMinutes()).padStart(2, "0");
         console.log("2️⃣ Heure d'ajout:", heureAjout);
 
-        // Construire l'URL
-        const url = `${API_URL}?action=addToWaiting&matricule=${encodeURIComponent(c.matricule)}&nom=${encodeURIComponent(c.nom)}&fonction=${encodeURIComponent(c.fonction || "")}&rattachement=${encodeURIComponent(c.rattachement || "")}&heureAjout=${heureAjout}`;
+        // Construire l'URL avec le password pour vérification
+        const url = `${API_URL}?action=addToWaiting&password=${encodeURIComponent(userPassword)}&matricule=${encodeURIComponent(c.matricule)}&nom=${encodeURIComponent(c.nom)}&fonction=${encodeURIComponent(c.fonction || "")}&rattachement=${encodeURIComponent(c.rattachement || "")}&heureAjout=${heureAjout}`;
         console.log("3️⃣ URL API:", url);
 
         // Ajouter à la base de données via l'API
@@ -890,26 +928,37 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       });
 
-      // Bouton X pour annuler
+      // Bouton X pour annuler - masqué pour PRODUCTION_VIEWER
       const deleteBtn = item.querySelector(".waiting-item-delete");
-      deleteBtn.addEventListener("click", async function (e) {
-        e.stopPropagation();
-        const matricule = personne.matricule;
-        
-        // Supprimer directement sans alerte
-        try {
-          const response = await fetch(`${API_URL}?action=removeFromWaiting&matricule=${encodeURIComponent(matricule)}`);
-          const result = await response.json();
+      
+      // Cacher le bouton pour PRODUCTION_VIEWER
+      if (userType === "PRODUCTION_VIEWER") {
+        deleteBtn.style.display = "none";
+      } else {
+        // Afficher et attacher le listener seulement pour OSTIE_ADMIN
+        deleteBtn.addEventListener("click", async function (e) {
+          e.stopPropagation();
+          const matricule = personne.matricule;
           
-          if (result.success) {
-            await loadWaitingList();
-            showMessage("✅ Personne supprimée de l'attente");
+          // Supprimer avec le password pour vérification
+          try {
+            const response = await fetch(`${API_URL}?action=removeFromWaiting&matricule=${encodeURIComponent(matricule)}&password=${encodeURIComponent(userPassword)}`);
+            const result = await response.json();
+            
+            if (result.success) {
+              await loadWaitingList();
+              showMessage("✅ Personne supprimée de l'attente");
+            } else if (result.error && result.error.includes("Accès refusé")) {
+              showMessage("❌ Vous n'avez pas la permission de supprimer de la liste d'attente", "error");
+            } else {
+              showMessage("❌ Erreur lors de la suppression", "error");
+            }
+          } catch (e) {
+            console.error("⚠️ Erreur suppression:", e);
+            showMessage("❌ Erreur lors de la suppression", "error");
           }
-        } catch (e) {
-          console.error("⚠️ Erreur suppression:", e);
-          showMessage("❌ Erreur lors de la suppression", "error");
-        }
-      });
+        });
+      }
 
       waitingList.appendChild(item);
     });
@@ -1045,8 +1094,10 @@ document.addEventListener("DOMContentLoaded", function () {
     choixSelect.value = "";
     shiftSelect.value = "";
 
-    // ✅ AFFICHER LE FORMULAIRE
-    formConsultation.style.display = "block";
+    // ✅ AFFICHER LE FORMULAIRE SEULEMENT POUR OSTIE_ADMIN
+    if (userType === "OSTIE_ADMIN") {
+      formConsultation.style.display = "block";
+    }
 
     // Retirer de la liste d'attente (via API)
     const matricule = waitingPersonnes[index]?.matricule;

@@ -22,7 +22,7 @@
 const CONFIG = {
   // =========== API Endpoint ===========
   // Remplacez par l'URL de votre Google Apps Script
-  API_URL: "https://script.google.com/macros/s/AKfycbyMdarl7vUC2Ivh_Yk86EcLSfzsdMWy7tFAv0E6C04nh_HdokjRsCDfpMG4HMrX4_bl5Q/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbzS1B0dowwGiPfB3AVSITzf-iCXevd27tBPlOUDoKKFbTsVaXy9p6T1LFZwcIxYXrUhOA/exec",
 
   // =========== Mode Demo ===========
   // Si DEMO_MODE est true, l'app utilise des données fictives
