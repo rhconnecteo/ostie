@@ -320,48 +320,54 @@ document.addEventListener("DOMContentLoaded", function () {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT); // Timeout configurable
+      const timeoutId = setTimeout(() => {
+        controller.abort("Timeout API - Requête dépassée");
+      }, API_TIMEOUT);
 
-      const response = await fetch(
-        `${API_URL}?action=validateLogin&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-        { signal: controller.signal }
-      );
-      
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Erreur serveur: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        isLoggedIn = true;
-        userPassword = password;
-        userType = result.type; // "OSTIE_ADMIN" ou "PRODUCTION_VIEWER"
-        userPermissions = result.permissions; // "all" ou "readonly"
-        localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("userPassword", password);
-        localStorage.setItem("userType", userType);
-        localStorage.setItem("userPermissions", userPermissions);
-        loginError.textContent = "";
-        loginPage.classList.remove("active");
-        appPage.classList.add("active");
-        usernameInput.value = "";
-        passwordInput.value = "";
-        showMessage("✅ Connecté avec succès!");
+      try {
+        const response = await fetch(
+          `${API_URL}?action=validateLogin&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+          { signal: controller.signal }
+        );
         
-        // Adapter l'interface selon le type d'utilisateur
-        setupUIForUserType(userType, userPermissions);
-        
-        loadCollaborateurs();
-        loadWaitingList(); // Charger la liste d'attente depuis la base de données
-        
-        // Recharger la liste d'attente automatiquement toutes les 30 secondes
-        startAutoRefreshWaitingList();
-      } else {
-        console.warn("Login échoué - identifiants incorrects");
-        loginError.textContent = "❌ " + (result.message || "Identifiants incorrects");
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`Erreur serveur: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+          isLoggedIn = true;
+          userPassword = password;
+          userType = result.type; // "OSTIE_ADMIN" ou "PRODUCTION_VIEWER"
+          userPermissions = result.permissions; // "all" ou "readonly"
+          localStorage.setItem("isLoggedIn", "true");
+          localStorage.setItem("userPassword", password);
+          localStorage.setItem("userType", userType);
+          localStorage.setItem("userPermissions", userPermissions);
+          loginError.textContent = "";
+          loginPage.classList.remove("active");
+          appPage.classList.add("active");
+          usernameInput.value = "";
+          passwordInput.value = "";
+          showMessage("✅ Connecté avec succès!");
+          
+          // Adapter l'interface selon le type d'utilisateur
+          setupUIForUserType(userType, userPermissions);
+          
+          loadCollaborateurs();
+          loadWaitingList(); // Charger la liste d'attente depuis la base de données
+          
+          // Recharger la liste d'attente automatiquement toutes les 30 secondes
+          startAutoRefreshWaitingList();
+        } else {
+          console.warn("Login échoué - identifiants incorrects");
+          loginError.textContent = "❌ " + (result.message || "Identifiants incorrects");
+        }
+      } finally {
+        clearTimeout(timeoutId);
       }
     } catch (err) {
       console.error("Erreur login:", err);
