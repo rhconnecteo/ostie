@@ -1,5 +1,6 @@
 // ================= CONFIG =================
 const SHEET_ID = "1wuDhND9dj2_sEbnTj_Ui5SUbZY-Yhmj7kfjauBJD91I";
+const TIME_ZONE = "Africa/Johannesburg"; // Madagascar timezone (UTC+3)
 
 // ================= LOGIN CREDENTIALS =================
 // CAS 1: username="admin", password="ostie" → Tous les rattachements, tout est permis (formulaire, insertion, modification)
@@ -169,8 +170,8 @@ function doGet(e) {
         matricule: e.parameter.matricule,
         nom: e.parameter.nom,
         fonction: e.parameter.fonction,
-        rattachement: e.parameter.rattachement,
-        heureAjout: e.parameter.heureAjout
+        rattachement: e.parameter.rattachement
+        // L'heure sera calculée côté serveur (pas du client)
       };
       addToWaitingList(data);
       return output({ success: true });
@@ -569,13 +570,12 @@ function calculateAverageDuration() {
   // ========== ÉTAPE 8: Calculer la moyenne ==========
   if (countWithReturn > 0) {
     const averageMinutes = Math.round(totalMinutes / countWithReturn);
-    Logger.log("✓ Durée moyenne calculée sur " + countWithReturn + " consultations d'HIER");
-    Logger.log("  Total: " + totalMinutes + " min, Moyenne: " + averageMinutes + " min");
+    // Durée moyenne calculée
     return averageMinutes;
   } else {
     // Si aucune donnée, retourner 1h25 (85 min) par défaut
     const defaultMinutes = 85; // 1h25
-    Logger.log("⚠️ Aucune consultation avec retour HIER, utilisant durée par défaut: " + minutesToTimeString(defaultMinutes));
+    // Utilisant durée par défaut
     return defaultMinutes;
   }
 }
@@ -616,37 +616,38 @@ function extractTimeFromDateOrString(value) {
   }
   
   // DEBUG: Logger le type et la valeur
-  Logger.log("  extractTime - Type: " + typeof value + ", instanceof Date: " + (value instanceof Date) + ", Value: " + value);
+  // Debug: type de valeur
   
   // Si c'est un objet Date
   if (value instanceof Date) {
-    const h = String(value.getHours()).padStart(2, "0");
-    const m = String(value.getMinutes()).padStart(2, "0");
-    const s = String(value.getSeconds()).padStart(2, "0");
-    const result = h + ":" + m + ":" + s;
-    Logger.log("  ✓ Date object → " + result);
-    return result;
+    // Ajouter 3 heures pour Madagascar (UTC+3)
+    let adjusted = new Date(value.getTime() + 3 * 60 * 60 * 1000);
+    const timeStr = String(adjusted.getUTCHours()).padStart(2, "0") + ":" + 
+                    String(adjusted.getUTCMinutes()).padStart(2, "0") + ":" + 
+                    String(adjusted.getUTCSeconds()).padStart(2, "0");
+    // Date object convertie
+    return timeStr;
   }
   
   // Si c'est une string
   if (typeof value === "string") {
-    Logger.log("  ✓ String passthrough → " + value);
+    // String passthrough
     return value;
   }
   
   // Essayer de convertir en string et extraire l'heure
   const strValue = String(value);
-  Logger.log("  ⚠️ Conversion en string: " + strValue);
+  // Conversion en string
   
   // Chercher un pattern HH:MM ou HH:MM:SS dans la string
   const match = strValue.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (match) {
     const result = String(match[1]).padStart(2, "0") + ":" + String(match[2]).padStart(2, "0") + ":" + (match[3] || "00");
-    Logger.log("  ✓ Regex match → " + result);
+    // Regex match
     return result;
   }
   
-  Logger.log("  ✗ Impossible d'extraire l'heure");
+  // Impossible d'extraire l'heure
   return "";
 }
 
@@ -707,11 +708,11 @@ function checkAndCloseAnomalies() {
   // ========== ÉTAPE 1: Déterminer la date d'aujourd'hui ==========
   const today = new Date();
   today.setHours(0, 0, 0, 0); // Mettre à 00:00:00
-  Logger.log("📅 Date d'aujourd'hui: " + today.toDateString());
+  // Checkng today's date
   
   // ========== ÉTAPE 2: Calculer la DURÉE MOYENNE ==========
   const averageDurationMinutes = calculateAverageDuration();
-  Logger.log("⏱️ Durée moyenne pour cette exécution: " + minutesToTimeString(averageDurationMinutes));
+  // Average duration computed
   
   let anomaliesCount = 0;
   let anomaliesDetail = [];
@@ -766,7 +767,7 @@ function checkAndCloseAnomalies() {
       // ========== ÉTAPE 6: Calculer l'heure de retour estimée ==========
       const heureRetourEstimee = addMinutesToTime(heureSortieFormatee, averageDurationMinutes);
       
-      Logger.log("🔧 [Ligne " + (i+1) + "] " + nom + " - Sortie: " + heureSortieFormatee + " → Retour estimé: " + heureRetourEstimee);
+      // Processing line
       
       // ========== ÉTAPE 7: Mettre à jour le spreadsheet ==========
       sheet.getRange(i + 1, 11).setValue(heureRetourEstimee);  // Colonne K - Heure de retour
@@ -782,24 +783,7 @@ function checkAndCloseAnomalies() {
     }
   }
   
-  // ========== ÉTAPE 7: Logs détaillés pour debugging ==========
-  Logger.log("========== DEBUG - PREMIÈRES LIGNES VÉRIFIÉES ==========");
-  for (let j = 0; j < Math.min(5, debugInfo.length); j++) {
-    const d = debugInfo[j];
-    Logger.log("Ligne " + d.ligne + " (" + d.nom + "): Date=" + d.dateSortie + ", Retour vide=" + d.heureRetourVide + ", Date ancienne=" + d.dateAncienne + ", Candidate=" + d.estAnomalieCandidate);
-  }
-  
-  Logger.log("========== RÉSUMÉ ANOMALIES ==========");
-  Logger.log("Total lignes traitées: " + (data.length - 1));
-  Logger.log("Anomalies détectées et fermées: " + anomaliesCount);
-  Logger.log("Durée moyenne appliquée: " + minutesToTimeString(averageDurationMinutes));
-  
-  if (anomaliesDetail.length > 0) {
-    Logger.log("Détails des anomalies:");
-    anomaliesDetail.forEach(a => {
-      Logger.log("  - " + a.nom + ": Sortie " + a.sortie + " → Retour estimé " + a.retourEstime);
-    });
-  }
+  // Anomalies processing complete
 }
 
 // ================= WAITING LIST MANAGEMENT =================
@@ -821,20 +805,36 @@ function addToWaitingList(data) {
       throw new Error("Données invalides: matricule et nom requis");
     }
     
+    // Calculer l'heure et la date côté serveur avec décalage UTC+3 (Madagascar)
+    // Google Apps Script utilise UTC, donc on ajoute 3 heures manuellement
+    let now = new Date();
+    now = new Date(now.getTime() + 3 * 60 * 60 * 1000); // Ajouter 3 heures
+    
+    const heureAjout = String(now.getUTCHours()).padStart(2, "0") + "h" + String(now.getUTCMinutes()).padStart(2, "0"); // FORMAT: 06h59 (pas 06:59 pour éviter que Google Sheets le transforme)
+    const day = String(now.getUTCDate()).padStart(2, "0");
+    const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+    const year = now.getUTCFullYear();
+    const today = day + "/" + month + "/" + year;
+    
     // Ajouter la ligne à la liste d'attente
-    const today = new Date().toLocaleDateString('fr-FR');
-    sheet.appendRow([
+    // IMPORTANT: Préfixer avec ' pour forcer Google Sheets à traiter comme du texte
+    const row = [
       String(data.matricule),
       String(data.nom),
       String(data.fonction || ""),
       String(data.rattachement || ""),
-      String(data.heureAjout || ""),
-      today
-    ]);
+      "'" + heureAjout,  // ' force le format texte
+      "'" + today        // ' force le format texte
+    ];
+    sheet.appendRow(row);
     
-    Logger.log("✅ Personne ajoutée à la liste d'attente: " + data.matricule);
+    // Également forcer le format de la colonne E et F en texte
+    const lastRow = sheet.getLastRow();
+    sheet.getRange(lastRow, 5, 1, 2).setNumberFormat("@");  // @ = format texte dans Google Sheets
+    
+    // Personne ajoutée
   } catch (err) {
-    Logger.log("❌ Erreur addToWaitingList: " + err.toString());
+    console.error("Erreur addToWaitingList: " + err.toString());
     throw err; // Relancer l'erreur pour que doGet la capture
   }
 }
@@ -849,22 +849,41 @@ function getWaitingList() {
     return [];
   }
   
-  const data = sheet.getDataRange().getValues();
+  // Utiliser getDisplayValues() pour obtenir les DONNÉES AFFICHÉES (texte pur)
+  // Pas getValues() qui retourne des objets Date!
+  const data = sheet.getDataRange().getDisplayValues();
   
   // Enlever le header
   if (data.length > 1) {
     data.shift();
   }
   
-  // Convertir en objets
-  return data.map(row => ({
-    matricule: row[0] || "",
-    nom: row[1] || "",
-    fonction: row[2] || "",
-    rattachement: row[3] || "",
-    heureAjout: row[4] || "",
-    dateAjout: row[5] || ""
-  }));
+  // Convertir en objets avec nettoyage des heures
+  return data.map(row => {
+    let heureAjout = row[4] || "";
+    
+    // Nettoyer les heures au format ISO cassé (1899-12-30T...)
+    if (heureAjout.includes("1899") || heureAjout.includes("T")) {
+      // Format ISO : extraire que l'heure
+      try {
+        const date = new Date(heureAjout);
+        const h = String(date.getUTCHours()).padStart(2, "0");
+        const m = String(date.getUTCMinutes()).padStart(2, "0");
+        heureAjout = h + ":" + m;
+      } catch (e) {
+        // Si parsing échoue, garder tel quel
+      }
+    }
+    
+    return {
+      matricule: row[0] || "",
+      nom: row[1] || "",
+      fonction: row[2] || "",
+      rattachement: row[3] || "",
+      heureAjout: heureAjout,
+      dateAjout: row[5] || ""
+    };
+  });
 }
 
 // Supprimer quelqu'un de la liste d'attente
@@ -889,9 +908,8 @@ function removeFromWaitingList(matricule) {
 // Pour tester directement sans erreur, cliquez sur "Exécuter" avec cette fonction
 // sélectionnée dans le menu déroulant en haut
 function testCheckAnomalies() {
-  Logger.log("🧪 TEST: Exécution de checkAndCloseAnomalies()...");
   checkAndCloseAnomalies();
-  Logger.log("✅ TEST: Terminé ! Consultez les logs ci-dessus");
+  // Test completed
 }
 
 // ================= AUTO CLOSE ANOMALIES (Trigger schedulé) =================
