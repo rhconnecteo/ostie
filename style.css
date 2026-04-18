@@ -1199,7 +1199,8 @@ small.warning {
 }
 
 .pending-section h3 {
-  display: none !important;
+  display: block !important;
+  visibility: visible !important;
 }
 
 .pending-section h4 {

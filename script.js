@@ -35,6 +35,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Elle sera chargée via loadWaitingList() après la connexion
   let waitingPersonnes = [];
   let waitingListRefreshInterval = null; // Pour l'auto-refresh
+  let dashboardRefreshInterval = null; // Pour l'auto-refresh du dashboard "Suivi de retours"
   let isAddingToWaiting = false; // Debounce pour éviter les doublons
   let selectingFromWaiting = false; // Debounce pour éviter les doublures de sélection
 
@@ -417,6 +418,9 @@ document.addEventListener("DOMContentLoaded", function () {
           
           // Recharger la liste d'attente automatiquement toutes les 30 secondes
           startAutoRefreshWaitingList();
+          
+          // Démarrer le refresh automatique du dashboard "Suivi de retours"
+          startAutoDashboardRefresh();
         } else {
           console.warn("Login échoué - identifiants incorrects");
           loginError.textContent = "❌ " + (result.message || "Identifiants incorrects");
@@ -453,6 +457,7 @@ document.addEventListener("DOMContentLoaded", function () {
     userPermissions = "";
     waitingPersonnes = []; // Effacer la liste d'attente locale
     stopAutoRefreshWaitingList(); // Arrêter l'auto-refresh
+    stopAutoDashboardRefresh(); // Arrêter l'auto-refresh du dashboard
     localStorage.setItem("isLoggedIn", "false");
     localStorage.setItem("userPassword", "");
     localStorage.setItem("userType", "");
@@ -656,13 +661,10 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       
       // ===== NETTOYER LA SECTION PENDING =====
-      // Masquer "Personnes en attente de retour" (le h3 initial dans pending-section)
+      // Les h3 seront gérés par displayPendingConsultations() - ne pas les masquer ici
+      // Cela permet un meilleur contrôle du contenu et de la visibilité
+      
       if (dashboardSection) {
-        const pendingSectionH3 = dashboardSection.querySelector(".pending-section h3");
-        if (pendingSectionH3) {
-          pendingSectionH3.style.display = "none";
-        }
-        
         // Modifier le titre principal en "Suivi de retour"
         const mainH2 = dashboardSection.querySelector("h2");
         if (mainH2) {
@@ -678,12 +680,12 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       
       // S'assurer que la section pending a padding réduit et styling clean
-      if (pendingSection) {
-        pendingSection.style.padding = "0";
-        pendingSection.style.margin = "0";
-        pendingSection.style.boxShadow = "none";
-        pendingSection.style.background = "transparent";
-        pendingSection.style.borderTop = "none";
+      if (pendingSectionDiv) {
+        pendingSectionDiv.style.padding = "0";
+        pendingSectionDiv.style.margin = "0";
+        pendingSectionDiv.style.boxShadow = "none";
+        pendingSectionDiv.style.background = "transparent";
+        pendingSectionDiv.style.borderTop = "none";
       }
       
       // ✅ Afficher les h4 (titres "En attente de retour" et "Déjà en retour")
@@ -742,6 +744,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (sectionName === "dashboard") {
         loadDashboardData();
+        // Démarrer le refresh automatique du dashboard
+        startAutoDashboardRefresh();
+      } else {
+        // Arrêter le refresh automatique si on quitte le dashboard
+        stopAutoDashboardRefresh();
       }
 
       if (sectionName === "rapport") {
@@ -824,12 +831,9 @@ document.addEventListener("DOMContentLoaded", function () {
       // Recharger la liste d'attente automatiquement toutes les 30 secondes
       startAutoRefreshWaitingList();
       
-      // OSTIE_ADMIN: Recharger le dashboard automatiquement toutes les 5 minutes
-      if (userType === "OSTIE_ADMIN") {
-        setInterval(() => {
-          loadDashboardData();
-        }, 5 * 60 * 1000);
-      }
+      // Démarrer le refresh automatique du dashboard
+      // (5 min pour OSTIE_ADMIN, 30 sec pour PRODUCTION_VIEWER)
+      startAutoDashboardRefresh();
     }, 100);
   }
 
@@ -1291,6 +1295,38 @@ document.addEventListener("DOMContentLoaded", function () {
     if (waitingListRefreshInterval) {
       clearInterval(waitingListRefreshInterval);
       waitingListRefreshInterval = null;
+    }
+  }
+
+  // Démarrer l'auto-refresh du dashboard "Suivi de retours"
+  function startAutoDashboardRefresh() {
+    // Arrêter tout intervalle existant
+    stopAutoDashboardRefresh();
+    
+    // Déterminer la fréquence de refresh selon le type d'utilisateur
+    const refreshInterval = (userType === "OSTIE_ADMIN") ? (5 * 60 * 1000) : 30000; // 5 min pour admin, 30 sec pour production
+    const refreshDuration = (userType === "OSTIE_ADMIN") ? "5 minutes" : "30 secondes";
+    
+    // Recharger au rythme défini
+    dashboardRefreshInterval = setInterval(() => {
+      const currentSection = document.querySelector(".section.active");
+      if (currentSection && currentSection.id === "dashboard") {
+        console.log(`🔄 Refresh automatique du dashboard (${refreshDuration})...`);
+        loadDashboardData().catch(e => {
+          if (e.name !== 'AbortError') {
+            console.error("Erreur auto-refresh dashboard:", e);
+          }
+        });
+      }
+    }, refreshInterval);
+  }
+
+  // Arrêter l'auto-refresh du dashboard
+  function stopAutoDashboardRefresh() {
+    if (dashboardRefreshInterval) {
+      clearInterval(dashboardRefreshInterval);
+      dashboardRefreshInterval = null;
+      console.log("⏹️ Refresh automatique arrêté");
     }
   }
 
@@ -2180,7 +2216,6 @@ document.addEventListener("DOMContentLoaded", function () {
           <th>Matricule</th>
           <th>Nom & Prénom</th>
           <th>Fonction</th>
-          <th>Rattachement</th>
           <th>Type Consultation</th>
           <th>Lieu</th>
           <th>Date</th>
@@ -2195,7 +2230,6 @@ document.addEventListener("DOMContentLoaded", function () {
           <th>Matricule</th>
           <th>Nom & Prénom</th>
           <th>Fonction</th>
-          <th>Rattachement</th>
           <th>Type Consultation</th>
           <th>Lieu</th>
           <th>Date</th>
@@ -2207,12 +2241,16 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       
       // ===== PRODUCTION_VIEWER: MASQUER COMPLÈTEMENT LES FILTRES =====
-      // Masquer TOUTES les lignes de filtres (les rangées jaunes avec inputs)
-      const allTableFilters = pendingSection?.querySelectorAll(".table-filter-row");
-      if (allTableFilters) {
-        allTableFilters.forEach(tr => {
-          tr.style.display = "none !important";
-          tr.remove(); // Supprimer complètement du DOM
+      // Masquer les sections de filtres (les divs contenant les inputs/selects de filtre)
+      const filterSections = pendingSection?.querySelectorAll(".pending-section > div");
+      if (filterSections) {
+        filterSections.forEach(div => {
+          // Chercher si ce div contient des inputs/selects de filtre
+          const filterElements = div.querySelectorAll("input[id*='pending'], select[id*='pending'], button[id*='pending']");
+          if (filterElements.length > 0 && div.style.background === "rgb(245, 245, 245)") {
+            // C'est une section de filtres - la masquer
+            div.style.display = "none !important";
+          }
         });
       }
       
@@ -2223,15 +2261,35 @@ document.addEventListener("DOMContentLoaded", function () {
           const hasFilterElements = tr.querySelector("input, select");
           if (hasFilterElements && !tr.querySelector("th")) {
             tr.style.display = "none !important";
-            tr.remove();
           }
+        });
+      }
+      
+      // ✅ S'ASSURER QUE LES TABLES SONT VISIBLES
+      const tableContainers = pendingSection?.querySelectorAll(".table-container");
+      if (tableContainers) {
+        tableContainers.forEach(container => {
+          container.style.display = "block !important";
+        });
+      }
+      
+      // ✅ S'ASSURER QUE LA SECTION PENDING ELLE-MÊME EST VISIBLE
+      if (pendingSection) {
+        pendingSection.style.display = "block !important";
+      }
+      
+      // ✅ S'ASSURER QUE LES H3 SONT VISIBLES
+      const h3s = pendingSection?.querySelectorAll("h3");
+      if (h3s) {
+        h3s.forEach(h3 => {
+          h3.style.display = "block !important";
         });
       }
       
       // ===== REMPLIR TABLE "EN ATTENTE" =====
       waitingTableBody.innerHTML = "";
       if (waitingList.length === 0) {
-        waitingTableBody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #27ae60; font-weight: bold;">✓ Aucune personne en attente de retour !</td></tr>';
+        waitingTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #27ae60; font-weight: bold;">✓ Aucune personne en attente de retour !</td></tr>';
       } else {
         waitingList.forEach((c) => {
           const row = document.createElement("tr");
@@ -2240,7 +2298,6 @@ document.addEventListener("DOMContentLoaded", function () {
           const matricule = c.matricule || c.Matricule || c.MATRICULE || "";
           const prenom = c.prenom || c.Prenom || c.PRENOM || "";
           const fonction = c.fonction || c.Fonction || c.FONCTION || "";
-          const rattachement = c.rattachement || c.Rattachement || c.RATTACHEMENT || c.serc || c.Serc || c.domaine || "";
           const typeConsultation = c.typeConsultation || c.TypeConsultation || c.TYPE_CONSULTATION || c.Type || "";
           const lieu = c.lieuConsultation || c.LieuConsultation || c.LIEU_CONSULTATION || c.Lieu || "";
           const date = c.date || c.Date || c.DATE || "";
@@ -2250,7 +2307,6 @@ document.addEventListener("DOMContentLoaded", function () {
             <td class="prod-matricule"><strong>${matricule}</strong></td>
             <td class="prod-nom"><strong>${nom} ${prenom}</strong></td>
             <td class="prod-fonction">${fonction || "-"}</td>
-            <td class="prod-rattachement">${rattachement || "-"}</td>
             <td class="prod-type">${typeConsultation || "-"}</td>
             <td class="prod-lieu">${lieu || "-"}</td>
             <td class="prod-date">${extractAndCorrectDate(date) || "-"}</td>
@@ -2264,7 +2320,7 @@ document.addEventListener("DOMContentLoaded", function () {
       // ===== REMPLIR TABLE "DÉJÀ RETOURNÉE" =====
       completedTableBody.innerHTML = "";
       if (completedList.length === 0) {
-        completedTableBody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 20px; color: #27ae60; font-weight: bold;">✓ Aucune personne complétée</td></tr>';
+        completedTableBody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 20px; color: #27ae60; font-weight: bold;">✓ Aucune personne complétée</td></tr>';
       } else {
         completedList.forEach(c => {
           const row = document.createElement("tr");
@@ -2273,7 +2329,6 @@ document.addEventListener("DOMContentLoaded", function () {
           const matricule = c.matricule || c.Matricule || c.MATRICULE || "";
           const prenom = c.prenom || c.Prenom || c.PRENOM || "";
           const fonction = c.fonction || c.Fonction || c.FONCTION || "";
-          const rattachement = c.rattachement || c.Rattachement || c.RATTACHEMENT || c.serc || c.Serc || c.domaine || "";
           const typeConsultation = c.typeConsultation || c.TypeConsultation || c.TYPE_CONSULTATION || c.Type || "";
           const lieu = c.lieuConsultation || c.LieuConsultation || c.LIEU_CONSULTATION || c.Lieu || "";
           const date = c.date || c.Date || c.DATE || "";
@@ -2286,7 +2341,6 @@ document.addEventListener("DOMContentLoaded", function () {
             <td class="prod-matricule"><strong>${matricule}</strong></td>
             <td class="prod-nom"><strong>${nom} ${prenom}</strong></td>
             <td class="prod-fonction">${fonction || "-"}</td>
-            <td class="prod-rattachement">${rattachement || "-"}</td>
             <td class="prod-type">${typeConsultation || "-"}</td>
             <td class="prod-lieu">${lieu || "-"}</td>
             <td class="prod-date">${extractAndCorrectDate(date) || "-"}</td>
@@ -2300,17 +2354,31 @@ document.addEventListener("DOMContentLoaded", function () {
         });
       }
       
-      // Modifier les titres des h4 - AFFICHER AVEC BONNES COULEURS
-      const h4s = document.querySelectorAll("h4");
-      h4s.forEach(h4 => {
-        if (h4.textContent.includes("En attente")) {
-          h4.textContent = "En attente de retour";
-          h4.style.color = "#667eea";
-          h4.style.display = "block";
-        } else if (h4.textContent.includes("Déjà")) {
-          h4.textContent = "Déjà en retour";
-          h4.style.color = "#27ae60";
-          h4.style.display = "block";
+      // Modifier les titres des h3 - AFFICHER AVEC BONNES COULEURS ET EMOJIS
+      const pendingSectionH3s = document.querySelectorAll(".pending-section h3");
+      pendingSectionH3s.forEach((h3, idx) => {
+        if (h3.textContent.includes("En attente")) {
+          h3.innerHTML = `⏳ En attente de retour <span style="background: #667eea; color: white; padding: 2px 8px; border-radius: 12px; font-size: 14px; font-weight: bold; margin-left: 10px;">${waitingList.length}</span>`;
+          h3.style.color = "#667eea";
+          h3.style.display = "block !important";
+          h3.style.visibility = "visible !important";
+          h3.style.fontSize = "20px";
+          h3.style.fontWeight = "bold";
+          h3.style.marginBottom = "20px";
+          h3.style.marginTop = "30px";
+          h3.style.paddingBottom = "10px";
+          h3.style.borderBottom = "3px solid #667eea";
+        } else if (h3.textContent.includes("Déjà")) {
+          h3.innerHTML = `✅ Déjà retournée <span style="background: #27ae60; color: white; padding: 2px 8px; border-radius: 12px; font-size: 14px; font-weight: bold; margin-left: 10px;">${completedList.length}</span>`;
+          h3.style.color = "#27ae60";
+          h3.style.display = "block !important";
+          h3.style.visibility = "visible !important";
+          h3.style.fontSize = "20px";
+          h3.style.fontWeight = "bold";
+          h3.style.marginBottom = "20px";
+          h3.style.marginTop = "30px";
+          h3.style.paddingBottom = "10px";
+          h3.style.borderBottom = "3px solid #27ae60";
         }
       });
       
@@ -2411,6 +2479,34 @@ document.addEventListener("DOMContentLoaded", function () {
     // Attacher les filtres modernisés
     attachPendingFilterListeners('waiting', waitingList);
     attachPendingFilterListeners('completed', completedList);
+    
+    // Modifier les titres des h3 pour OSTIE_ADMIN aussi - AFFICHER AVEC BONNES COULEURS ET EMOJIS
+    const adminH3s = document.querySelectorAll(".pending-section h3");
+    adminH3s.forEach(h3 => {
+      if (h3.textContent.includes("En attente")) {
+        h3.innerHTML = `⏳ En attente de retour <span style="background: #667eea; color: white; padding: 2px 8px; border-radius: 12px; font-size: 14px; font-weight: bold; margin-left: 10px;">${filteredPending.length}</span>`;
+        h3.style.color = "#667eea";
+        h3.style.display = "block !important";
+        h3.style.visibility = "visible !important";
+        h3.style.fontSize = "20px";
+        h3.style.fontWeight = "bold";
+        h3.style.marginBottom = "20px";
+        h3.style.marginTop = "30px";
+        h3.style.paddingBottom = "10px";
+        h3.style.borderBottom = "3px solid #667eea";
+      } else if (h3.textContent.includes("Déjà")) {
+        h3.innerHTML = `✅ Déjà retournée <span style="background: #27ae60; color: white; padding: 2px 8px; border-radius: 12px; font-size: 14px; font-weight: bold; margin-left: 10px;">${completedList.length}</span>`;
+        h3.style.color = "#27ae60";
+        h3.style.display = "block !important";
+        h3.style.visibility = "visible !important";
+        h3.style.fontSize = "20px";
+        h3.style.fontWeight = "bold";
+        h3.style.marginBottom = "20px";
+        h3.style.marginTop = "30px";
+        h3.style.paddingBottom = "10px";
+        h3.style.borderBottom = "3px solid #27ae60";
+      }
+    });
     
     // Attacher les en-têtes triables
     attachSortableHeaders();
