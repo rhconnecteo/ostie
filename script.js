@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Utiliser la configuration du fichier config.js
   const API_URL = (typeof CONFIG !== 'undefined' && CONFIG.API_URL) 
     ? CONFIG.API_URL 
-    :"https://script.google.com/macros/s/AKfycbyZERWhlq_oUY0yVe--_W0wYd19aUVXF2wF1Ty0LpIYnJWDatEHAR4qXIhuwvYShwCWlw/exec";
+    :"https://script.google.com/macros/s/AKfycbyBWBnCHGZlHPZHubXDjdCAA_F8uHanBHHjYnKxheOGexcmgKyiOjZSWotRO-owFyTRaA/exec";
   
   const API_TIMEOUT = (typeof CONFIG !== 'undefined' && CONFIG.API_TIMEOUT) 
     ? CONFIG.API_TIMEOUT 
@@ -198,18 +198,34 @@ document.addEventListener("DOMContentLoaded", function () {
   // Extraire l'heure d'un format ISO (ex: "1899-12-30T15:00:00.000Z" → "15:00:00")
   function extractTimeFromISO(isoDateTime) {
     if (!isoDateTime || typeof isoDateTime !== "string") return "-";
+    
+    // Format ISO avec T: "2026-04-18T08:03:39"
     if (isoDateTime.includes("T")) {
       const time = isoDateTime.split("T")[1];
       if (time) {
-        return time.split(".")[0]; // Retourne HH:MM:SS
+        return time.split(".")[0].slice(0, 5); // Retourne HH:MM
       }
     }
+    
+    // Format "HHhMM" ou "HH:MM:SS" ou "HH:MM"
+    if (isoDateTime.includes("h")) {
+      // Format "08h03" → retourner tel quel
+      return isoDateTime;
+    }
+    
+    if (isoDateTime.includes(":")) {
+      // Format "HH:MM:SS" → retourner "HH:MM"
+      return isoDateTime.slice(0, 5);
+    }
+    
     return isoDateTime;
   }
 
   // Extraire et corriger la date d'un format ISO (ex: "2026-04-03T15:00:00Z" → "2026-04-04")
   function extractAndCorrectDate(isoDateTime) {
     if (!isoDateTime || typeof isoDateTime !== "string") return "-";
+    
+    // Format ISO avec T: "2026-04-03T15:00:00Z"
     if (isoDateTime.includes("T")) {
       const date = isoDateTime.split("T")[0]; // 2026-04-03
       const parts = date.split("-");
@@ -222,6 +238,23 @@ document.addEventListener("DOMContentLoaded", function () {
         return `${newYear}-${newMonth}-${newDay}`;
       }
     }
+    
+    // Format DD/MM/YYYY: "23/02/2026" → convertir en "2026-02-23"
+    if (isoDateTime.includes("/")) {
+      const parts = isoDateTime.split("/");
+      if (parts.length === 3) {
+        const day = parts[0];
+        const month = parts[1];
+        const year = parts[2];
+        return `${year}-${month}-${day}`;
+      }
+    }
+    
+    // Format ISO simple: "2026-04-03"
+    if (isoDateTime.includes("-") && !isoDateTime.includes("T")) {
+      return isoDateTime;
+    }
+    
     return isoDateTime;
   }
 
@@ -439,11 +472,10 @@ document.addEventListener("DOMContentLoaded", function () {
     const waitingSection = document.getElementById("waitingSection");
 
     // Déterminer les rattachements autorisés
-    authorizedRattachements = []; // Tous les rattachements pour les deux types
+    // ✅ Remplis dans loadDashboardData() après chargement des consultations
+    // authorizedRattachements sera rempli après que allConsultations soit chargée
 
     if (type === "OSTIE_ADMIN" && permissions === "all") {
-      // Admin complet: voir formulaire + dashboard + rapport
-      // Ne pas mettre display:none en inline - laisser les CSS rules gérer via .active
       
       // Afficher tous les boutons de nav
       navBtns.forEach(btn => btn.style.display = "inline-block");
@@ -601,11 +633,11 @@ document.addEventListener("DOMContentLoaded", function () {
         });
       }
       
-      // ❌ Masquer les tables complétées
+      // ✅ Afficher les tables complétées
       const completedTables = dashboardSection?.querySelectorAll('[id*="completedTable"], [id*="completed"]');
       if (completedTables) {
         completedTables.forEach(el => {
-          el.style.display = "none";
+          el.style.display = "block";
         });
       }
       
@@ -613,64 +645,58 @@ document.addEventListener("DOMContentLoaded", function () {
       const todayConsultationsSection = document.querySelector('.today-consultations-section');
       if (todayConsultationsSection) todayConsultationsSection.style.display = "none";
       
-      // ❌ Masquer le h4 "Déjà retournée" et sa table
-      const h4Headers = dashboardSection?.querySelectorAll('h4');
-      if (h4Headers) {
-        h4Headers.forEach(h4 => {
-          const text = h4.textContent.toLowerCase();
-          if (text.includes("retournée") || text.includes("completed")) {
-            h4.style.display = "none";
-            // Masquer aussi le conteneur suivant (la table)
-            let next = h4.nextElementSibling;
-            while (next && !next.matches('h4')) {
-              if (next.classList.contains('table-container') || next.tagName === 'TABLE') {
-                next.style.display = "none";
-              }
-              next = next.nextElementSibling;
-            }
-          }
-        });
+      // ❌ Masquer les statistiques
+      const statsGrid = dashboardSection?.querySelector('.stats-grid');
+      if (statsGrid) statsGrid.style.display = "none";
+      
+      // ❌ Masquer les cartes de rattachement (Statut par Rattachement)
+      const rattachementCards = dashboardSection?.querySelector('.rattachement-cards-section');
+      if (rattachementCards) {
+        rattachementCards.style.display = "none";
       }
       
-      // ✅ Afficher et renommer le titre "Suivi des Retours"
-      const pendingSection = document.querySelector('.pending-section');
-      if (pendingSection) {
-        // Trouver et afficher/renommer le h3
-        const h3InPending = pendingSection.querySelector('h3');
-        if (h3InPending) {
-          h3InPending.textContent = "👥 Suivi des Retours - Détails Complets";
-          h3InPending.style.display = "block";
+      // ===== NETTOYER LA SECTION PENDING =====
+      // Masquer "Personnes en attente de retour" (le h3 initial dans pending-section)
+      if (dashboardSection) {
+        const pendingSectionH3 = dashboardSection.querySelector(".pending-section h3");
+        if (pendingSectionH3) {
+          pendingSectionH3.style.display = "none";
         }
-        pendingSection.style.display = "block";
         
-        // ✅ Afficher le h4 "En attente" qui précède la table
-        const h4InPending = pendingSection.querySelector('h4');
-        if (h4InPending) {
-          h4InPending.style.display = "block !important";
-          h4InPending.textContent = "👥 Détails des Personnes en Attente de Retour";
-          console.log("✅ H4 'En attente' affichée");
+        // Modifier le titre principal en "Suivi de retour"
+        const mainH2 = dashboardSection.querySelector("h2");
+        if (mainH2) {
+          mainH2.textContent = "Suivi de retour";
+          mainH2.style.display = "block";
+        }
+        
+        // Masquer le sous-titre initial
+        const subtitleP = dashboardSection.querySelector(".section-subtitle");
+        if (subtitleP) {
+          subtitleP.style.display = "none";
         }
       }
       
-      // ❌ Masquer TOUS les h3 dans le dashboard (pas les h4 du tableau)
-      dashboardSection?.querySelectorAll('h3').forEach(h3 => {
-        if (!pendingSection?.contains(h3)) {
-          h3.style.display = "none";
+      // S'assurer que la section pending a padding réduit et styling clean
+      if (pendingSection) {
+        pendingSection.style.padding = "0";
+        pendingSection.style.margin = "0";
+        pendingSection.style.boxShadow = "none";
+        pendingSection.style.background = "transparent";
+        pendingSection.style.borderTop = "none";
+      }
+      
+      // ✅ Afficher les h4 (titres "En attente de retour" et "Déjà en retour")
+      dashboardSection?.querySelectorAll('h4').forEach(h4 => {
+        if (h4.textContent.includes("En attente") || h4.textContent.includes("Déjà")) {
+          h4.style.display = "block";
         }
       });
       
-      // ❌ Masquer les h4 "Déjà retournée" 
-      dashboardSection?.querySelectorAll('h4').forEach(h4 => {
-        if (h4.textContent.includes("Déjà retournée") || h4.textContent.includes("completed")) {
-          h4.style.display = "none";
-          // Masquer aussi le conteneur suivant (la table)
-          let next = h4.nextElementSibling;
-          while (next && !next.matches('h4')) {
-            if (next.classList.contains('table-container') || next.tagName === 'TABLE') {
-              next.style.display = "none";
-            }
-            next = next.nextElementSibling;
-          }
+      // ✅ Afficher les table-containers pour que les tables soient visibles
+      dashboardSection?.querySelectorAll('.table-container').forEach(container => {
+        if (container.closest('.pending-section')) {
+          container.style.display = "block";
         }
       });
       
@@ -797,6 +823,13 @@ document.addEventListener("DOMContentLoaded", function () {
       
       // Recharger la liste d'attente automatiquement toutes les 30 secondes
       startAutoRefreshWaitingList();
+      
+      // OSTIE_ADMIN: Recharger le dashboard automatiquement toutes les 5 minutes
+      if (userType === "OSTIE_ADMIN") {
+        setInterval(() => {
+          loadDashboardData();
+        }, 5 * 60 * 1000);
+      }
     }, 100);
   }
 
@@ -1529,6 +1562,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
       allConsultations = json.data || [];
       
+      // Vérifier les données reçues (DEBUG)
+      console.log("📊 Premières consultations reçues:", allConsultations.slice(0, 2).map(c => ({
+        matricule: c.matricule,
+        nom: c.nom,
+        heureRetour: c.heureRetour,
+        heureEntreeOstie: c.heureEntreeOstie,
+        heureSortieOstie: c.heureSortieOstie
+      })));
+      
+      // ✅ MAINTENANT que allConsultations est chargée, remplir authorizedRattachements
+      authorizedRattachements = [...new Set(allConsultations.map(c => c.rattachement).filter(r => r))];
+      console.log("✅ authorizedRattachements remplis après chargement:", authorizedRattachements);
+      
       // Filtrer les données
       const rattachmentsReels = [...new Set(allConsultations.map(c => c.rattachement))];
       
@@ -1578,10 +1624,11 @@ document.addEventListener("DOMContentLoaded", function () {
    */
   function getTodayConsultations() {
     const todayISO = getTodayMadagascar();
-    return allConsultations.filter(c => {
+    const result = allConsultations.filter(c => {
       const correctedDate = extractAndCorrectDate(c.date);
       return correctedDate === todayISO;
     });
+    return result;
   }
 
   function updateStatistics() {
@@ -1615,17 +1662,14 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 0);
 
     statTotal.textContent = total;
-    // Afficher seulement le nombre en attente d'aujourd'hui
     statEnAttente.textContent = enAttenteMyDomain;
     statRepos.textContent = repos;
     
-    // Si le stat pour jours RM existe, le remplir
     const statJoursRM = document.getElementById("statJoursRM");
     if (statJoursRM) {
       statJoursRM.textContent = joursRM.toFixed(1);
     }
 
-    // Afficher les cartes de rattachement si en mode production
     if (userPermissions === "readonly") {
       updateRattachementCards();
     }
@@ -1954,17 +1998,20 @@ document.addEventListener("DOMContentLoaded", function () {
    * @returns {Array} Consultations sans heure de retour enregistrée
    */
   function getPendingConsultations() {
-    // Pour PRODUCTION_VIEWER: afficher TOUTES les consultations
-    if (userType === "PRODUCTION_VIEWER") {
-      console.log("🔍 PRODUCTION_VIEWER mode: on affiche toutes les consultations");
-      return allConsultations || [];
-    }
+    // Pour OSTIE_ADMIN: afficher SEULEMENT les consultations d'aujourd'hui SANS heure de retour
+    // (en attente = pas encore retournée)
+    const todayISO = getTodayMadagascar();
     
-    // Pour OSTIE_ADMIN: retourner seulement celles avec heure de sortie (en attente OU complétées)
-    return allConsultations.filter(c => {
-      const heureSortie = c.heureSortie || c.heure_sortie || "";
-      return heureSortie && heureSortie.trim() !== "";
+    const pending = allConsultations.filter(c => {
+      const correctedDate = extractAndCorrectDate(c.date);
+      // Inclure si la date est aujourd'hui ET pas d'heure de retour
+      if (correctedDate !== todayISO) return false;
+      
+      const heureRetour = c.heureRetour || c.heure_retour || "";
+      return !heureRetour || heureRetour.trim() === "";
     });
+    
+    return pending;
   }
 
   // ================= ATTACH SORTABLE HEADERS =================
@@ -2058,22 +2105,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ================= UPDATE PENDING LIST =================
   function updatePendingList() {
-    console.log("📋 updatePendingList appelée - userType:", userType);
-    console.log("📊 allConsultations disponibles?", allConsultations, "Length:", allConsultations?.length);
-    
     const allPending = getPendingConsultations(); // TOUS les en attente
-    console.log("📊 Tous les en attente de sortie:", allPending.length);
-    console.log("🔍 Détail allPending:", allPending);
     
-    const filteredPending = filterByDomain(allPending); // Filtrés par domaine
-    console.log("🎯 En attente filtrés par domaine:", filteredPending.length);
-    console.log("🔍 Détail filteredPending:", filteredPending);
+    // Pour OSTIE_ADMIN: afficher TOUS les en attente sans filtrer par domaine
+    const filteredPending = allPending;
     
     const waitingTableBody = document.getElementById("pendingWaitingTableBody");
     const completedTableBody = document.getElementById("pendingCompletedTableBody");
-    
-    console.log("✅ waitingTableBody trouvé?", !!waitingTableBody);
-    console.log("✅ completedTableBody trouvé?", !!completedTableBody);
     
     if (!waitingTableBody || !completedTableBody) {
       console.error("Éléments DOM manquants! waitingTableBody:", waitingTableBody, "completedTableBody:", completedTableBody);
@@ -2084,6 +2122,12 @@ document.addEventListener("DOMContentLoaded", function () {
     const pendingReturnCount = document.getElementById("pendingReturnCount");
     if (pendingReturnCount) {
       pendingReturnCount.textContent = allPending.length; // Nombre TOTAL en attente de retour
+    }
+
+    // Mettre à jour le nombre de complétées (sera recalculé après filtrage)
+    const pendingCompletedCount = document.getElementById("pendingCompletedCount");
+    if (pendingCompletedCount) {
+      pendingCompletedCount.textContent = '0'; // Sera mis à jour après calcul
     }
 
     // Obtenir la date d'aujourd'hui au format YYYY-MM-DD
@@ -2102,7 +2146,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
     
-    const completedList = filteredPending.filter(c => {
+    const completedList = allConsultations.filter(c => {
       // Complétée = heure retour + résultat + DATE D'AUJOURD'HUI
       if (!(c.heureRetour && c.resultat)) return false;
       
@@ -2110,32 +2154,29 @@ document.addEventListener("DOMContentLoaded", function () {
       const consultationDate = extractAndCorrectDate(c.date);
       return consultationDate === todayDate;
     });
-    console.log("✅ Complétées aujourd'hui:", completedList.length);
+
+    // Mettre à jour le nombre de complétées
+    if (pendingCompletedCount) {
+      pendingCompletedCount.textContent = completedList.length;
+    }
 
     // ===== POUR PRODUCTION_VIEWER: TABLE SIMPLIFIÉE ET DÉTAILLÉE =====
     if (userType === "PRODUCTION_VIEWER") {
-      console.log("🔧 Mode PRODUCTION_VIEWER - Affichage table simplifiée");
       
       const pendingWaitingTable = document.getElementById("pendingWaitingTable");
       const pendingCompletedTable = document.getElementById("pendingCompletedTable");
       const tableFilters = document.querySelectorAll(".table-filter-row");
-      const sortHeaders = document.querySelectorAll(".sortable-header");
-      
-      console.log("🔧 pendingWaitingTable trouvé?", !!pendingWaitingTable);
-      console.log("🔧 pendingCompletedTable trouvé?", !!pendingCompletedTable);
       
       // S'assurer que la section est visible
       const pendingSection = document.querySelector(".pending-section");
       if (pendingSection) {
         pendingSection.style.display = "block";
-        console.log("✅ Section 'pending-section' affichée");
       }
       
-      // Adapter les en-têtes pour PRODUCTION_VIEWER
-      const thead = pendingWaitingTable?.querySelector("thead tr:first-child");
-      if (thead) {
-        // Réinitialiser les en-têtes avec seulement 8 colonnes
-        thead.innerHTML = `
+      // Adapter les en-têtes pour PRODUCTION_VIEWER - TABLE EN ATTENTE
+      const theadWaiting = pendingWaitingTable?.querySelector("thead tr:first-child");
+      if (theadWaiting) {
+        theadWaiting.innerHTML = `
           <th>Matricule</th>
           <th>Nom & Prénom</th>
           <th>Fonction</th>
@@ -2145,27 +2186,56 @@ document.addEventListener("DOMContentLoaded", function () {
           <th>Date</th>
           <th>Heure Sortie</th>
         `;
-        console.log("✅ En-têtes adaptés pour PRODUCTION_VIEWER");
       }
       
-      // Masquer les filtres pour PRODUCTION_VIEWER
-      tableFilters.forEach(tr => tr.style.display = "none");
-      console.log("✅ Filtres masqués - nombre:", tableFilters.length);
+      // Adapter les en-têtes pour PRODUCTION_VIEWER - TABLE COMPLÉTÉE
+      const theadCompleted = pendingCompletedTable?.querySelector("thead tr:first-child");
+      if (theadCompleted) {
+        theadCompleted.innerHTML = `
+          <th>Matricule</th>
+          <th>Nom & Prénom</th>
+          <th>Fonction</th>
+          <th>Rattachement</th>
+          <th>Type Consultation</th>
+          <th>Lieu</th>
+          <th>Date</th>
+          <th>Heure Sortie</th>
+          <th>Heure Retour</th>
+          <th>Résultat</th>
+          <th>Nb Jours RM</th>
+        `;
+      }
       
+      // ===== PRODUCTION_VIEWER: MASQUER COMPLÈTEMENT LES FILTRES =====
+      // Masquer TOUTES les lignes de filtres (les rangées jaunes avec inputs)
+      const allTableFilters = pendingSection?.querySelectorAll(".table-filter-row");
+      if (allTableFilters) {
+        allTableFilters.forEach(tr => {
+          tr.style.display = "none !important";
+          tr.remove(); // Supprimer complètement du DOM
+        });
+      }
+      
+      // Double vérification: masquer les tr qui contiennent des inputs/selects de filtre
+      const allTableRows = pendingSection?.querySelectorAll("table tr");
+      if (allTableRows) {
+        allTableRows.forEach(tr => {
+          const hasFilterElements = tr.querySelector("input, select");
+          if (hasFilterElements && !tr.querySelector("th")) {
+            tr.style.display = "none !important";
+            tr.remove();
+          }
+        });
+      }
+      
+      // ===== REMPLIR TABLE "EN ATTENTE" =====
       waitingTableBody.innerHTML = "";
-      
       if (waitingList.length === 0) {
-        console.log("ℹ️ Aucune personne en attente de retour");
         waitingTableBody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #27ae60; font-weight: bold;">✓ Aucune personne en attente de retour !</td></tr>';
       } else {
-        console.log("📝 Affichage de", waitingList.length, "personnes en attente");
-        
-        waitingList.forEach((c, idx) => {
-          console.log(`  ${idx + 1}. ${c.matricule} - ${c.nom} (Sortie: ${c.heureSortie})`);
-          
+        waitingList.forEach((c) => {
           const row = document.createElement("tr");
           
-          // Fallbacks pour les noms de propriétés alternatifs
           const nom = c.nom || c.Nom || c.NAME || "";
           const matricule = c.matricule || c.Matricule || c.MATRICULE || "";
           const prenom = c.prenom || c.Prenom || c.PRENOM || "";
@@ -2191,23 +2261,62 @@ document.addEventListener("DOMContentLoaded", function () {
         });
       }
       
-      // Masquer la table des complétées
-      if (pendingCompletedTable?.parentElement) {
-        pendingCompletedTable.parentElement.style.display = "none";
+      // ===== REMPLIR TABLE "DÉJÀ RETOURNÉE" =====
+      completedTableBody.innerHTML = "";
+      if (completedList.length === 0) {
+        completedTableBody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 20px; color: #27ae60; font-weight: bold;">✓ Aucune personne complétée</td></tr>';
+      } else {
+        completedList.forEach(c => {
+          const row = document.createElement("tr");
+          
+          const nom = c.nom || c.Nom || c.NAME || "";
+          const matricule = c.matricule || c.Matricule || c.MATRICULE || "";
+          const prenom = c.prenom || c.Prenom || c.PRENOM || "";
+          const fonction = c.fonction || c.Fonction || c.FONCTION || "";
+          const rattachement = c.rattachement || c.Rattachement || c.RATTACHEMENT || c.serc || c.Serc || c.domaine || "";
+          const typeConsultation = c.typeConsultation || c.TypeConsultation || c.TYPE_CONSULTATION || c.Type || "";
+          const lieu = c.lieuConsultation || c.LieuConsultation || c.LIEU_CONSULTATION || c.Lieu || "";
+          const date = c.date || c.Date || c.DATE || "";
+          const heureSortie = c.heureSortie || c.HeureSortie || c.HEURE_SORTIE || c.heure_sortie || "";
+          const heureRetour = c.heureRetour || c.HeureRetour || c.HEURE_RETOUR || c.HeureRetour || "";
+          const resultat = c.resultat || c.Resultat || c.RESULTAT || "";
+          const nbJourRM = c.nbJourRM || c.NbJourRM || c.NB_JOUR_RM || "";
+          
+          row.innerHTML = `
+            <td class="prod-matricule"><strong>${matricule}</strong></td>
+            <td class="prod-nom"><strong>${nom} ${prenom}</strong></td>
+            <td class="prod-fonction">${fonction || "-"}</td>
+            <td class="prod-rattachement">${rattachement || "-"}</td>
+            <td class="prod-type">${typeConsultation || "-"}</td>
+            <td class="prod-lieu">${lieu || "-"}</td>
+            <td class="prod-date">${extractAndCorrectDate(date) || "-"}</td>
+            <td class="prod-heure">${extractTimeFromISO(heureSortie) || "-"}</td>
+            <td class="prod-retour">${extractTimeFromISO(heureRetour) || "-"}</td>
+            <td class="prod-resultat">${resultat || "-"}</td>
+            <td class="prod-nbjours">${nbJourRM || "-"}</td>
+          `;
+          
+          completedTableBody.appendChild(row);
+        });
       }
       
-      // Modifier les titres
+      // Modifier les titres des h4 - AFFICHER AVEC BONNES COULEURS
       const h4s = document.querySelectorAll("h4");
       h4s.forEach(h4 => {
         if (h4.textContent.includes("En attente")) {
-          h4.textContent = "👥 Détails des Personnes en Attente de Retour";
+          h4.textContent = "En attente de retour";
           h4.style.color = "#667eea";
-          h4.style.fontWeight = "700";
-          h4.style.fontSize = "18px";
-        } else if (h4.textContent.includes("Déjà retournée")) {
-          h4.style.display = "none";
+          h4.style.display = "block";
+        } else if (h4.textContent.includes("Déjà")) {
+          h4.textContent = "Déjà en retour";
+          h4.style.color = "#27ae60";
+          h4.style.display = "block";
         }
       });
+      
+      // Attacher les filtres modernisés pour PRODUCTION_VIEWER
+      attachPendingFilterListeners('waiting', waitingList);
+      attachPendingFilterListeners('completed', completedList);
       
       return;
     }
@@ -2215,45 +2324,60 @@ document.addEventListener("DOMContentLoaded", function () {
     // ===== POUR OSTIE_ADMIN: TABLE AVEC ACTIONS =====
     // ===== AFFICHER TABLE "EN ATTENTE" =====
     waitingTableBody.innerHTML = "";
-    if (waitingList.length === 0) {
-      waitingTableBody.innerHTML = '<tr><td colspan="14" style="text-align: center; padding: 20px;">✓ Aucun en attente !</td></tr>';
+    if (filteredPending.length === 0) {
+      waitingTableBody.innerHTML = '<tr><td colspan="16" style="text-align: center; padding: 20px;">✓ Aucun en attente !</td></tr>';
     } else {
-      waitingList.forEach(c => {
-        const row = document.createElement("tr");
-        const rowId = `pending-${c.matricule}`;
-        
-        row.innerHTML = `
-          <td>${c.matricule}</td>
-          <td>${c.nom} ${c.prenom || ""}</td>
-          <td>${c.fonction}</td>
-          <td>${c.typeConsultation}</td>
-          <td>${c.lieuConsultation}</td>
-          <td>${c.shift}</td>
-          <td>${c.choix || "-"}</td>
-          <td>${extractAndCorrectDate(c.date) || "-"}</td>
-          <td>${extractTimeFromISO(c.heureSortie)}</td>
-          <td><input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}" data-row-id="${rowId}" ${c.heureRetour ? 'checked' : ''}></td>
-          <td><input type="time" class="time-retour" data-matricule="${c.matricule}" value="${c.heureRetour ? extractTimeFromISO(c.heureRetour) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
-          <td>
-            <select class="select-resultat" data-matricule="${c.matricule}" ${c.heureRetour ? '' : 'disabled'} style="width:100%; padding:3px 4px; font-size:10px;">
-              <option value="">-- Sélectionner --</option>
-              <option value="Consultation médical" ${c.resultat === 'Consultation médical' ? 'selected' : ''}>Consultation médical</option>
-              <option value="Repos médical" ${c.resultat === 'Repos médical' ? 'selected' : ''}>Repos médical</option>
-              <option value="Assistante maternelle" ${c.resultat === 'Assistante maternelle' ? 'selected' : ''}>Assistante maternelle</option>
-              <option value="Visite d'embauche" ${c.resultat === "Visite d'embauche" ? 'selected' : ''}>Visite d'embauche</option>
-            </select>
-          </td>
-          <td><input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" value="${c.nbJourRM || ''}" placeholder="J" ${(c.resultat === "Repos médical" || c.resultat === "Assistante maternelle") ? '' : 'style="display:none;"'}></td>
-          <td><button class="btn-validate-retour" data-matricule="${c.matricule}" ${c.heureRetour ? '' : 'disabled'}>✓</button></td>
-        `;
-        waitingTableBody.appendChild(row);
-      });
+      try {
+        filteredPending.forEach((c, idx) => {
+          try {
+            const row = document.createElement("tr");
+            const rowId = `pending-${c.matricule}`;
+            
+            const fonction = c.fonction || c.function || "";
+            const typeConsultation = c.typeConsultation || c.type_consultation || "";
+            const lieuConsultation = c.lieuConsultation || c.lieu_consultation || "";
+            const heureSortie = c.heureSortie || c.heure_sortie || c.heuresortie || "";
+            
+            row.innerHTML = `
+              <td>${c.matricule}</td>
+              <td>${c.nom} ${c.prenom || ""}</td>
+              <td>${fonction}</td>
+              <td>${typeConsultation}</td>
+              <td>${lieuConsultation}</td>
+              <td>${c.shift || ""}</td>
+              <td>${c.choix || "-"}</td>
+              <td>${extractAndCorrectDate(c.date) || "-"}</td>
+              <td>${extractTimeFromISO(heureSortie) || ""}</td>
+              <td><input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}" data-row-id="${rowId}" ${c.heureRetour ? 'checked' : ''}></td>
+              <td><input type="time" class="time-retour" data-matricule="${c.matricule}" value="${c.heureRetour ? extractTimeFromISO(c.heureRetour) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
+              <td>
+                <select class="select-resultat" data-matricule="${c.matricule}" ${c.heureRetour ? '' : 'disabled'} style="width:100%; padding:3px 4px; font-size:10px;">
+                  <option value="">-- Sélectionner --</option>
+                  <option value="Consultation médical" ${c.resultat === 'Consultation médical' ? 'selected' : ''}>Consultation médical</option>
+                  <option value="Repos médical" ${c.resultat === 'Repos médical' ? 'selected' : ''}>Repos médical</option>
+                  <option value="Assistante maternelle" ${c.resultat === 'Assistante maternelle' ? 'selected' : ''}>Assistante maternelle</option>
+                  <option value="Visite d'embauche" ${c.resultat === "Visite d'embauche" ? 'selected' : ''}>Visite d'embauche</option>
+                </select>
+              </td>
+              <td><input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" value="${c.nbJourRM || ''}" placeholder="J" ${(c.resultat === "Repos médical" || c.resultat === "Assistante maternelle") ? '' : 'style="display:none;"'}></td>
+              <td><input type="time" class="time-entree-ostie" data-matricule="${c.matricule}" value="${c.heureEntreeOstie ? extractTimeFromISO(c.heureEntreeOstie) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
+              <td><input type="time" class="time-sortie-ostie" data-matricule="${c.matricule}" value="${c.heureSortieOstie ? extractTimeFromISO(c.heureSortieOstie) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
+              <td><button class="btn-validate-retour" data-matricule="${c.matricule}" ${c.heureRetour ? '' : 'disabled'}>✓</button></td>
+            `;
+            waitingTableBody.appendChild(row);
+          } catch (rowError) {
+            console.error(`❌ Erreur lors de l'ajout de la ligne ${idx}:`, rowError, c);
+          }
+        });
+      } catch (forError) {
+        console.error("❌ Erreur lors du forEach:", forError);
+      }
     }
 
     // ===== AFFICHER TABLE "COMPLÉTÉE" =====
     completedTableBody.innerHTML = "";
     if (completedList.length === 0) {
-      completedTableBody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">✓ Aucune encore</td></tr>';
+      completedTableBody.innerHTML = '<tr><td colspan="14" style="text-align: center; padding: 20px;">✓ Aucune encore</td></tr>';
     } else {
       completedList.forEach(c => {
         const row = document.createElement("tr");
@@ -2270,6 +2394,8 @@ document.addEventListener("DOMContentLoaded", function () {
           <td>${extractTimeFromISO(c.heureRetour) || "-"}</td>
           <td>${c.resultat || "-"}</td>
           <td>${c.nbJourRM || "-"}</td>
+          <td>${c.heureEntreeOstie ? extractTimeFromISO(c.heureEntreeOstie) : "-"}</td>
+          <td>${c.heureSortieOstie ? extractTimeFromISO(c.heureSortieOstie) : "-"}</td>
         `;
         completedTableBody.appendChild(row);
       });
@@ -2282,8 +2408,168 @@ document.addEventListener("DOMContentLoaded", function () {
     attachTableFilters('waiting');
     attachTableFilters('completed');
     
+    // Attacher les filtres modernisés
+    attachPendingFilterListeners('waiting', waitingList);
+    attachPendingFilterListeners('completed', completedList);
+    
     // Attacher les en-têtes triables
     attachSortableHeaders();
+  }
+
+  // ================= FILTRES MODERNISÉS POUR LES TABLEAUX =================
+  function attachPendingFilterListeners(tableType, dataSource) {
+    const isWaiting = tableType === 'waiting';
+    const searchId = isWaiting ? 'pendingWaitingSearch' : 'pendingCompletedSearch';
+    const fonctionId = isWaiting ? 'pendingWaitingFonction' : 'pendingCompletedFonction';
+    const rattachementId = isWaiting ? 'pendingWaitingRattachement' : 'pendingCompletedRattachement';
+    const resultatId = isWaiting ? 'pendingWaitingResultat' : 'pendingCompletedResultat';
+    const resetId = isWaiting ? 'pendingWaitingResetFilters' : 'pendingCompletedResetFilters';
+    const tableId = isWaiting ? 'pendingWaitingTable' : 'pendingCompletedTable';
+
+    // Remplir les dropdowns avec les valeurs disponibles
+    populateFilterDropdowns(dataSource, fonctionId, rattachementId, resultatId, isWaiting);
+
+    // Attacher les événements de filtrage
+    const searchInput = document.getElementById(searchId);
+    const fonctionSelect = document.getElementById(fonctionId);
+    const rattachementSelect = document.getElementById(rattachementId);
+    const resultatSelect = document.getElementById(resultatId);
+    const resetBtn = document.getElementById(resetId);
+
+    // Disable resultat filter for waiting table
+    if (isWaiting && resultatSelect) {
+      resultatSelect.disabled = true;
+      resultatSelect.style.opacity = '0.5';
+      resultatSelect.style.cursor = 'not-allowed';
+    }
+
+    if (!searchInput && !fonctionSelect && !rattachementSelect && !resetBtn) return;
+
+    const applyFilter = () => {
+      const searchText = searchInput?.value.toLowerCase() || '';
+      const selectedFonction = fonctionSelect?.value || '';
+      const selectedRattachement = rattachementSelect?.value || '';
+      const selectedResultat = resultatSelect?.value || '';
+
+      const table = document.getElementById(tableId);
+      if (!table) return;
+
+      const tbody = table.querySelector('tbody');
+      if (!tbody) return;
+
+      const rows = tbody.querySelectorAll('tr');
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length === 0) return; // Skip empty rows
+
+        // Get text content only (ignore input/checkbox/select values)
+        const matricule = (cells[0]?.textContent || '').toLowerCase();
+        const nom = (cells[1]?.textContent || '').toLowerCase();
+        const fonction = (cells[2]?.textContent || '').toLowerCase();
+        
+        // For waiting table: columns are different than completed
+        let rattachement = '';
+        let resultat = '';
+        
+        if (isWaiting) {
+          // Waiting: Matricule, Nom, Fonction, Type, Lieu, Shift, Choix, Date, HeureSortie, Retour?, HeureRetour, Résultat, NbJours, Valider
+          // No rattachement column in waiting
+          resultat = (cells[11]?.textContent || '').toLowerCase(); // Résultat is at index 11
+        } else {
+          // Completed: Matricule, Nom, Fonction, Type, Lieu, Shift, Choix, Date, HeureSortie, HeureRetour, Résultat, NbJours
+          // No rattachement column
+          resultat = (cells[10]?.textContent || '').toLowerCase(); // Résultat is at index 10
+        }
+
+        // Apply filters
+        const matchSearch = !searchText || matricule.includes(searchText) || nom.includes(searchText);
+        const matchFonction = !selectedFonction || fonction.includes(selectedFonction.toLowerCase());
+        const matchRattachement = true; // No rattachement column in these tables
+        const matchResultat = !selectedResultat || resultat.includes(selectedResultat.toLowerCase());
+
+        const show = matchSearch && matchFonction && matchRattachement && matchResultat;
+        row.style.display = show ? '' : 'none';
+      });
+    };
+
+    searchInput?.addEventListener('input', applyFilter);
+    fonctionSelect?.addEventListener('change', applyFilter);
+    rattachementSelect?.addEventListener('change', applyFilter);
+    if (!isWaiting) {
+      resultatSelect?.addEventListener('change', applyFilter);
+    }
+
+    resetBtn?.addEventListener('click', () => {
+      searchInput.value = '';
+      fonctionSelect.value = '';
+      rattachementSelect.value = '';
+      resultatSelect.value = '';
+      applyFilter();
+    });
+  }
+
+  function populateFilterDropdowns(dataSource, fonctionId, rattachementId, resultatId, isWaiting) {
+    const fonctions = new Set();
+    const rattachements = new Set();
+    const resultats = new Set();
+
+    dataSource.forEach(item => {
+      const fonction = item.fonction || item.Fonction || '';
+      const rattachement = item.rattachement || item.Rattachement || '';
+      const resultat = item.resultat || item.Resultat || '';
+
+      if (fonction) fonctions.add(fonction);
+      if (rattachement) rattachements.add(rattachement);
+      if (resultat) resultats.add(resultat);
+    });
+
+    // Populate Fonction dropdown
+    const fonctionSelect = document.getElementById(fonctionId);
+    if (fonctionSelect) {
+      // Clear existing options (keep first "--Toutes--" option)
+      const firstOption = fonctionSelect.querySelector('option');
+      fonctionSelect.innerHTML = '';
+      if (firstOption) fonctionSelect.appendChild(firstOption);
+      
+      Array.from(fonctions).sort().forEach(f => {
+        const option = document.createElement('option');
+        option.value = f;
+        option.textContent = f;
+        fonctionSelect.appendChild(option);
+      });
+    }
+
+    // Populate Rattachement dropdown
+    const rattachementSelect = document.getElementById(rattachementId);
+    if (rattachementSelect) {
+      // Clear existing options
+      const firstOption = rattachementSelect.querySelector('option');
+      rattachementSelect.innerHTML = '';
+      if (firstOption) rattachementSelect.appendChild(firstOption);
+      
+      Array.from(rattachements).sort().forEach(r => {
+        const option = document.createElement('option');
+        option.value = r;
+        option.textContent = r;
+        rattachementSelect.appendChild(option);
+      });
+    }
+
+    // Populate Résultat dropdown (only for completed table)
+    const resultatSelect = document.getElementById(resultatId);
+    if (resultatSelect && !isWaiting) {
+      // Clear existing options
+      const firstOption = resultatSelect.querySelector('option');
+      resultatSelect.innerHTML = '';
+      if (firstOption) resultatSelect.appendChild(firstOption);
+      
+      Array.from(resultats).sort().forEach(r => {
+        const option = document.createElement('option');
+        option.value = r;
+        option.textContent = r;
+        resultatSelect.appendChild(option);
+      });
+    }
   }
 
   // ================= ATTACH PENDING ACTION LISTENERS =================
@@ -2295,6 +2581,8 @@ document.addEventListener("DOMContentLoaded", function () {
         const row = this.closest("tr");
         const timeInput = row.querySelector(".time-retour");
         const selectResultat = row.querySelector(".select-resultat");
+        const timeEntreeOstie = row.querySelector(".time-entree-ostie");
+        const timeSortieOstie = row.querySelector(".time-sortie-ostie");
         const btnValidate = row.querySelector(".btn-validate-retour");
         
         if (this.checked) {
@@ -2302,12 +2590,18 @@ document.addEventListener("DOMContentLoaded", function () {
           timeInput.value = now.time;
           timeInput.disabled = false;
           selectResultat.disabled = false;
+          timeEntreeOstie.disabled = false;
+          timeSortieOstie.disabled = false;
           btnValidate.disabled = false;
         } else {
           timeInput.value = "";
           timeInput.disabled = true;
           selectResultat.value = "";
           selectResultat.disabled = true;
+          timeEntreeOstie.value = "";
+          timeEntreeOstie.disabled = true;
+          timeSortieOstie.value = "";
+          timeSortieOstie.disabled = true;
           row.querySelector(".input-nbjours").style.display = "none";
           row.querySelector(".input-nbjours").value = "";
           btnValidate.disabled = true;
@@ -2359,6 +2653,10 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
         
+        // Récupérer les temps Ostie
+        const timeEntreeOstie = row.querySelector(".time-entree-ostie");
+        const timeSortieOstie = row.querySelector(".time-sortie-ostie");
+        
         // Enregistrer les données
         const params = new URLSearchParams({
           action: "setRetour",
@@ -2366,7 +2664,9 @@ document.addEventListener("DOMContentLoaded", function () {
           matricule: matricule,
           heureRetour: timeInput.value,
           resultat: selectedResult,
-          nbJourRM: inputJours.value || ""
+          nbJourRM: inputJours.value || "",
+          heureEntreeOstie: timeEntreeOstie?.value || "",
+          heureSortieOstie: timeSortieOstie?.value || ""
         });
 
         try {
@@ -2525,6 +2825,48 @@ document.addEventListener("DOMContentLoaded", function () {
         } catch (e) {
           console.error(e);
           showMessage("❌ Erreur serveur", "error");
+        }
+      });
+    });
+
+    // Événement pour les champs "Heure d'entrée à l'ostie" et "Heure de sortie à l'ostie"
+    document.querySelectorAll(".time-entree-ostie, .time-sortie-ostie").forEach(input => {
+      input.addEventListener("change", async function () {
+        const matricule = this.closest("tr").querySelector(".checkbox-retour").dataset.matricule;
+        const row = this.closest("tr");
+        const timeEntreeOstie = row.querySelector(".time-entree-ostie");
+        const timeSortieOstie = row.querySelector(".time-sortie-ostie");
+        
+        console.log(`📝 Enregistrement temps Ostie pour ${matricule}: Entrée=${timeEntreeOstie?.value}, Sortie=${timeSortieOstie?.value}`);
+        
+        // Enregistrer les temps Ostie directement
+        const params = new URLSearchParams({
+          action: "setTempsOstie",
+          password: userPassword,
+          matricule: matricule,
+          heureEntreeOstie: timeEntreeOstie?.value || "",
+          heureSortieOstie: timeSortieOstie?.value || ""
+        });
+
+        try {
+          const res = await fetch(`${API_URL}?${params}`);
+          const json = await res.json();
+          
+          if (json.success) {
+            console.log(`✅ Temps Ostie enregistrés pour ${matricule}`);
+            showMessage(`✅ Temps Ostie enregistrés pour ${matricule}`);
+            
+            // Recharger les données après enregistrement
+            setTimeout(() => {
+              loadDashboardData();
+            }, 500);
+          } else {
+            console.error("❌ Erreur lors de l'enregistrement des temps Ostie:", json.message);
+            showMessage(`❌ Erreur: ${json.message}`, "error");
+          }
+        } catch (error) {
+          console.error("❌ Erreur réseau:", error);
+          showMessage("❌ Erreur réseau lors de l'enregistrement", "error");
         }
       });
     });
@@ -3862,7 +4204,7 @@ document.addEventListener("DOMContentLoaded", function () {
   async function checkAnomaliesManually() {
     // Vérification de permissions: bloquer si mode production (readonly)
     if (userPermissions === "readonly") {
-      showMessage("❌ Accès refusé: Mode production en lecture seule", "error");
+      showMessage("Accès refusé: Mode production en lecture seule", "error");
       return;
     }
 
@@ -3870,27 +4212,29 @@ document.addEventListener("DOMContentLoaded", function () {
       const btn = document.getElementById("btnCheckAnomalies");
       if (btn) {
         btn.disabled = true;
-        btn.textContent = "⏳ Vérification...";
+        btn.textContent = "Vérification...";
       }
 
-      const res = await fetch(`${API_URL}?action=checkAnomalies`);
+      // Récupérer le mot de passe et l'envoyer en paramètre
+      const pwd = userPassword || localStorage.getItem("userPassword") || "";
+      const res = await fetch(`${API_URL}?action=checkAnomalies&password=${encodeURIComponent(pwd)}`);
       const json = await res.json();
 
       if (json.success) {
-        showMessage("✅ Vérification des anomalies effectuée ! Les consultations non fermées depuis plus de 24h ont été marquées comme 'anomalie'.");
+        showMessage("Vérification des anomalies effectuée ! Les consultations non fermées depuis plus de 24h ont été marquées comme 'anomalie'.");
         // Recharger les données
         loadDashboardData();
       } else {
-        showMessage("❌ Erreur : " + json.error, "error");
+        showMessage("Erreur : " + json.error, "error");
       }
     } catch (e) {
       console.error("Erreur lors de la vérification des anomalies :", e);
-      showMessage("❌ Erreur serveur lors de la vérification", "error");
+      showMessage("Erreur serveur lors de la vérification", "error");
     } finally {
       const btn = document.getElementById("btnCheckAnomalies");
       if (btn) {
         btn.disabled = false;
-        btn.textContent = "🔍 Vérifier les anomalies";
+        btn.textContent = "Vérifier les anomalies";
       }
     }
   }

@@ -138,9 +138,27 @@ function doGet(e) {
         nbJourRM: e.parameter.nbJourRM || "",
         anomalie: e.parameter.anomalie || "",
         casGrave: e.parameter.casGrave || "",
-        commentaires: e.parameter.commentaires || ""
+        commentaires: e.parameter.commentaires || "",
+        heureEntreeOstie: e.parameter.heureEntreeOstie || "",
+        heureSortieOstie: e.parameter.heureSortieOstie || ""
       };
       setRetour(data);
+      return output({ success: true });
+    }
+    if (action === "setTempsOstie") {
+      const password = e.parameter.password;
+      const userType = getUserTypeFromPassword(password);
+      
+      if (!isActionAllowed(userType, action)) {
+        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission" });
+      }
+      
+      const data = {
+        matricule: e.parameter.matricule,
+        heureEntreeOstie: e.parameter.heureEntreeOstie || "",
+        heureSortieOstie: e.parameter.heureSortieOstie || ""
+      };
+      setTempsOstie(data);
       return output({ success: true });
     }
     if (action === "checkAnomalies") {
@@ -375,8 +393,15 @@ function getCollaborateurs() {
 function getConsultations(password) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName("OSTIE");
-  const data = sheet.getDataRange().getValues();
+  
+  // ========== ÉTAPE 1: CRÉER LES COLONNES SI MANQUANTES ==========
+  ensureColumnsExist();
+  
+  const data = sheet.getDataRange().getDisplayValues();  // Utiliser getDisplayValues() pour garder le format texte
   if (data.length <= 1) return []; // pas de données
+  
+  // Log le nombre de colonnes pour debug
+  console.log(`📊 Nombre de colonnes in Sheet: ${data[0].length}`);
   
   data.shift(); // enlever header
 
@@ -394,7 +419,7 @@ function getConsultations(password) {
   // A=Matricule, B=Nom, C=Fonction, D=Rattachement, 
   // E=Type consultation, F=Lieu consultation, G=Shift,
   // H=Choix, I=Date, J=Heure sortie, K=Heure retour, L=Résultat, M=Jours RM, 
-  // N=Anomalie, O=Cas grave, P=Commentaires
+  // N=Anomalie, O=Cas grave, P=Commentaires, Q=Heure Entrée Ostie, R=Heure Sortie Ostie
   let consultations = data.map(r => ({
     matricule: r[0],
     nom: r[1],
@@ -411,7 +436,9 @@ function getConsultations(password) {
     nbJourRM: r[12] || "",          // Colonne M
     anomalie: r[13] || "",          // Colonne N
     casGrave: r[14] || "",          // Colonne O
-    commentaires: r[15] || ""       // Colonne P
+    commentaires: r[15] || "",      // Colonne P
+    heureEntreeOstie: r[16] || "",  // Colonne Q
+    heureSortieOstie: r[17] || ""   // Colonne R
   }));
 
   // FILTRER par rattachement si la liste n'est pas vide
@@ -423,6 +450,29 @@ function getConsultations(password) {
   }
 
   return consultations;
+}
+
+// ================= ENSURE COLUMNS EXIST =================
+// Crée les colonnes Q et R s'ils n'existent pas
+function ensureColumnsExist() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName("OSTIE");
+  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  
+  // Vérifier si les colonnes existent déjà
+  const hasHeureEntreeOstie = headerRow.some(h => h === "Heure Entrée Ostie" || h === "heureEntreeOstie");
+  const hasHeureSortieOstie = headerRow.some(h => h === "Heure Sortie Ostie" || h === "heureSortieOstie");
+  
+  // Ajouter les colonnes si manquantes
+  if (!hasHeureEntreeOstie) {
+    const lastCol = sheet.getLastColumn() + 1;
+    sheet.getRange(1, lastCol).setValue("Heure Entrée Ostie");
+  }
+  
+  if (!hasHeureSortieOstie) {
+    const lastCol = sheet.getLastColumn() + 1;
+    sheet.getRange(1, lastCol).setValue("Heure Sortie Ostie");
+  }
 }
 
 // ================= SAVE CONSULTATION =================
@@ -472,26 +522,82 @@ function saveConsultation(d) {
 function setRetour(d) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName("OSTIE");
+  
+  // ========== ÉTAPE 1: CRÉER LES COLONNES SI MANQUANTES ==========
+  ensureColumnsExist();
+  
   const data = sheet.getDataRange().getValues();
 
   // Trouver la ligne avec ce matricule ET heureRetour vide
-  // Index 10 = Colonne K (heureRetour)
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] == d.matricule && data[i][10] === "") {
-      // Colonne K = heureRetour (index 10)
-      // Colonne L = résultat (index 11)
-      // Colonne M = nbJourRM (index 12)
-      // Colonne N = anomalie (index 13)
-      // Colonne O = casGrave (index 14)
-      // Colonne P = commentaires (index 15)
+      // Déterminer les index précis des colonnes Q et R
+      const lastCol = sheet.getLastColumn();
+      const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      
+      let heureEntreeOstieCol = 17; // Par défaut Colonne Q = 17
+      let heureSortieOstieCol = 18; // Par défaut Colonne R = 18
+      
+      // Trouver les vraies colonnes
+      for (let col = 0; col < headerRow.length; col++) {
+        if (headerRow[col] === "Heure Entrée Ostie" || headerRow[col] === "heureEntreeOstie") {
+          heureEntreeOstieCol = col + 1;
+        }
+        if (headerRow[col] === "Heure Sortie Ostie" || headerRow[col] === "heureSortieOstie") {
+          heureSortieOstieCol = col + 1;
+        }
+      }
+      
+      // Sauvegarder toutes les données
+      sheet.getRange(i + 1, 11).setValue(d.heureRetour);  // K = Heure Retour
+      sheet.getRange(i + 1, 12).setValue(d.resultat);     // L = Résultat
+      sheet.getRange(i + 1, 13).setValue(d.nbJourRM);     // M = Nb jours RM
+      sheet.getRange(i + 1, 14).setValue(d.anomalie || "");     // N = Anomalie
+      sheet.getRange(i + 1, 15).setValue(d.casGrave || ""); // O = Cas grave
+      sheet.getRange(i + 1, 16).setValue(d.commentaires); // P = Commentaires
+      sheet.getRange(i + 1, heureEntreeOstieCol).setValue(d.heureEntreeOstie || ""); // Q = Heure Entrée Ostie
+      sheet.getRange(i + 1, heureSortieOstieCol).setValue(d.heureSortieOstie || ""); // R = Heure Sortie Ostie
 
-      sheet.getRange(i + 1, 11).setValue(d.heureRetour);  // K = 11
-      sheet.getRange(i + 1, 12).setValue(d.resultat);     // L = 12
-      sheet.getRange(i + 1, 13).setValue(d.nbJourRM);     // M = 13
-      sheet.getRange(i + 1, 14).setValue(d.anomalie || "");     // N = 14
-      sheet.getRange(i + 1, 15).setValue(d.casGrave || ""); // O = 15
-      sheet.getRange(i + 1, 16).setValue(d.commentaires); // P = 16
+      console.log(`✅ Retour enregistré pour ${d.matricule}`);
+      break;
+    }
+  }
+}
 
+// ================= SET TEMPS OSTIE =================
+function setTempsOstie(d) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName("OSTIE");
+  
+  // ========== ÉTAPE 1: CRÉER LES COLONNES SI MANQUANTES ==========
+  ensureColumnsExist();
+  
+  const data = sheet.getDataRange().getValues();
+
+  // Trouver la ligne avec ce matricule
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] == d.matricule) {
+      // Déterminer les index précis des colonnes Q et R
+      const lastCol = sheet.getLastColumn();
+      const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      
+      let heureEntreeOstieCol = 17; // Par défaut Colonne Q = 17
+      let heureSortieOstieCol = 18; // Par défaut Colonne R = 18
+      
+      // Trouver les vraies colonnes
+      for (let col = 0; col < headerRow.length; col++) {
+        if (headerRow[col] === "Heure Entrée Ostie" || headerRow[col] === "heureEntreeOstie") {
+          heureEntreeOstieCol = col + 1;
+        }
+        if (headerRow[col] === "Heure Sortie Ostie" || headerRow[col] === "heureSortieOstie") {
+          heureSortieOstieCol = col + 1;
+        }
+      }
+      
+      sheet.getRange(i + 1, heureEntreeOstieCol).setValue(d.heureEntreeOstie || "");
+      sheet.getRange(i + 1, heureSortieOstieCol).setValue(d.heureSortieOstie || "");
+      
+      console.log(`✅ Temps Ostie enregistrés pour ${d.matricule} - Entrée: ${d.heureEntreeOstie}, Sortie: ${d.heureSortieOstie}`);
       break;
     }
   }
@@ -623,9 +729,8 @@ function extractTimeFromDateOrString(value) {
     // Ajouter 3 heures pour Madagascar (UTC+3)
     let adjusted = new Date(value.getTime() + 3 * 60 * 60 * 1000);
     const timeStr = String(adjusted.getUTCHours()).padStart(2, "0") + ":" + 
-                    String(adjusted.getUTCMinutes()).padStart(2, "0") + ":" + 
-                    String(adjusted.getUTCSeconds()).padStart(2, "0");
-    // Date object convertie
+                    String(adjusted.getUTCMinutes()).padStart(2, "0");
+    // Date object convertie (HH:MM)
     return timeStr;
   }
   
@@ -642,8 +747,8 @@ function extractTimeFromDateOrString(value) {
   // Chercher un pattern HH:MM ou HH:MM:SS dans la string
   const match = strValue.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (match) {
-    const result = String(match[1]).padStart(2, "0") + ":" + String(match[2]).padStart(2, "0") + ":" + (match[3] || "00");
-    // Regex match
+    const result = String(match[1]).padStart(2, "0") + ":" + String(match[2]).padStart(2, "0");
+    // Regex match (HH:MM)
     return result;
   }
   

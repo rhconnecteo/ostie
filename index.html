@@ -215,85 +215,103 @@
       <!-- STATISTIQUES -->
       <div class="stats-grid">
         <div class="stat-card stat-total">
-          <h3>👥 Total Consultations</h3>
+          <h3>Total Consultations</h3>
           <p id="statTotal" class="stat-value">0</p>
         </div>
         <div class="stat-card stat-attente">
-          <h3>⏳ En attente de retour</h3>
+          <h3>En attente de retour</h3>
           <p id="statEnAttente" class="stat-value">0</p>
         </div>
         <div class="stat-card stat-repos">
-          <h3>🩺 Repos Médical</h3>
+          <h3>Repos Médical</h3>
           <p id="statRepos" class="stat-value">0</p>
         </div>
         <div class="stat-card stat-joursrm">
-          <h3>📋 Jours de Repos Médical</h3>
+          <h3>Jours de Repos Médical</h3>
           <p id="statJoursRM" class="stat-value">0</p>
         </div>
       </div>
 
       <!-- VÉRIFIER LES ANOMALIES -->
       <div style="margin: 20px 0; text-align: center;">
-        <button id="btnCheckAnomalies" class="btn-anomalies">🔍 Vérifier les anomalies</button>
+        <button id="btnCheckAnomalies" class="btn-anomalies">Vérifier les anomalies</button>
         <p style="font-size: 12px; color: #666; margin-top: 8px;">Marquer automatiquement les consultations non fermées depuis plus de 24h comme "anomalie"</p>
       </div>
 
       <!-- GRAPHIQUES -->
       <div class="charts-grid">
         <div class="chart-container">
-          <h3>📊 Répartition Consultation vs Repos</h3>
+          <h3>Répartition Consultation vs Repos</h3>
           <canvas id="chartCamembert"></canvas>
         </div>
         <div class="chart-container">
-          <h3>📈 Consultations par Jour</h3>
+          <h3>Consultations par Jour</h3>
           <canvas id="chartJours"></canvas>
         </div>
       </div>
 
       <!-- CARTES DE RATTACHEMENT (Production Dashboard) -->
-      <div id="rattachementCardsSection" class="rattachement-cards-section" style="display: none; margin-top: 40px;">
-        <h3>🏢 Statut par Rattachement</h3>
+      <div id="rattachementCardsSection" class="rattachement-cards-section" style="display: none;">
+        <h3>Statut par Rattachement</h3>
         <div id="rattachementCards" class="rattachement-cards-grid">
           <!-- Les cartes s'affichent ici -->
         </div>
       </div>
 
       <!-- PERSONNES EN ATTENTE DE RETOUR -->
-      <div class="pending-section">
-        <h3>⏳ Personnes en attente de retour (<span id="pendingReturnCount">0</span>)</h3>
+      <div class="pending-section" style="margin: 30px 0; padding: 20px; background: #fff; border-radius: 8px; border-left: 5px solid #e74c3c;">
+        <h3>En attente de retour (<span id="pendingReturnCount">0</span>)</h3>
 
-        <!-- TABLE 1 : EN ATTENTE DE RETOUR -->
-        <h4 style="margin-top: 30px; margin-bottom: 15px; color: #333;">⏳ En attente de retour</h4>
-        <div class="table-container" style="width: 100%; overflow-x: auto;">
+        <!-- FILTRES POUR TABLE EN ATTENTE -->
+        <div style="margin-top: 20px; margin-bottom: 20px; padding: 15px; background: #f5f5f5; border-radius: 5px;">
+          <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+            <div style="flex: 1; min-width: 200px;">
+              <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">🔍 Recherche</label>
+              <input type="text" id="pendingWaitingSearch" placeholder="Chercher par nom ou matricule..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+            </div>
+            <div style="min-width: 180px;">
+              <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">👔 Fonction</label>
+              <select id="pendingWaitingFonction" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                <option value="">-- Toutes --</option>
+              </select>
+            </div>
+            <div style="min-width: 180px;">
+              <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">🏢 Rattachement</label>
+              <select id="pendingWaitingRattachement" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                <option value="">-- Tous --</option>
+              </select>
+            </div>
+            <div style="min-width: 180px;">
+              <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">📊 Résultat</label>
+              <select id="pendingWaitingResultat" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                <option value="">-- Tous --</option>
+              </select>
+            </div>
+            <button id="pendingWaitingResetFilters" style="padding: 10px 15px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;">↺ Réinitialiser</button>
+          </div>
+        </div>
+
+        <!-- TABLE : EN ATTENTE DE RETOUR -->
+        <div class="table-container" style="width: 100%; overflow-x: auto; margin-bottom: 30px;">
           <table id="pendingWaitingTable" class="pending-table">
             <thead>
               <tr>
-                <th class="sortable-header" data-col="0" data-table="waiting" style="cursor: pointer; user-select: none;">Matricule <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="1" data-table="waiting" style="cursor: pointer; user-select: none;">Nom & Prénom <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="2" data-table="waiting" style="cursor: pointer; user-select: none;">Fonction <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="3" data-table="waiting" style="cursor: pointer; user-select: none;">Type Consultation <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="4" data-table="waiting" style="cursor: pointer; user-select: none;">Lieu <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="5" data-table="waiting" style="cursor: pointer; user-select: none;">Shift <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="6" data-table="waiting" style="cursor: pointer; user-select: none;">Choix <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="7" data-table="waiting" style="cursor: pointer; user-select: none;">Date <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="8" data-table="waiting" style="cursor: pointer; user-select: none;">Heure Sortie <span class="sort-arrow">⬆️</span></th>
+                <th>Matricule</th>
+                <th>Nom & Prénom</th>
+                <th>Fonction</th>
+                <th>Type Consultation</th>
+                <th>Lieu</th>
+                <th>Shift</th>
+                <th>Choix</th>
+                <th>Date</th>
+                <th>Heure Sortie</th>
                 <th>Retour?</th>
                 <th>Heure Retour</th>
                 <th>Résultat</th>
-                <th>Jours RM</th>
+                <th>Nb Jours RM</th>
+                <th>Heure Entrée Ostie</th>
+                <th>Heure Sortie Ostie</th>
                 <th>Valider</th>
-              </tr>
-              <tr class="table-filter-row">
-                <th><input type="text" class="filter-waiting-col" data-col="0" placeholder="🔍"></th>
-                <th><input type="text" class="filter-waiting-col" data-col="1" placeholder="🔍"></th>
-                <th><input type="text" class="filter-waiting-col" data-col="2" placeholder="🔍"></th>
-                <th><input type="text" class="filter-waiting-col" data-col="3" placeholder="🔍"></th>
-                <th><input type="text" class="filter-waiting-col" data-col="4" placeholder="🔍"></th>
-                <th><select class="filter-waiting-col" data-col="5"><option value="">☐</option><option value="Jour">Jour</option><option value="Nuit">Nuit</option></select></th>
-                <th><select class="filter-waiting-col" data-col="6"><option value="">☐</option><option value="Day off">Day off</option><option value="En poste">En poste</option></select></th>
-                <th><input type="date" class="filter-waiting-col" data-col="7"></th>
-                <th><input type="text" class="filter-waiting-col" data-col="8" placeholder="🔍"></th>
-                <th colspan="5" style="text-align: center; background: #ffeaa7; font-weight: 600; font-size: 10px;">⚙️ Actions</th>
               </tr>
             </thead>
             <tbody id="pendingWaitingTableBody">
@@ -301,39 +319,60 @@
             </tbody>
           </table>
         </div>
+      </div>
 
-        <!-- TABLE 2 : DÉJÀ RETOURNÉE -->
-        <h4 style="margin-top: 30px; margin-bottom: 15px; color: #333;">✅ Déjà retournée</h4>
+      <!-- PERSONNES DÉJÀ RETOURNÉES -->
+      <div class="pending-section" style="margin: 30px 0; padding: 20px; background: #fff; border-radius: 8px; border-left: 5px solid #27ae60;">
+        <h3>Déjà retournée (<span id="pendingCompletedCount">0</span>)</h3>
+
+        <!-- FILTRES POUR TABLE DÉJÀ RETOURNÉE -->
+        <div style="margin-top: 20px; margin-bottom: 20px; padding: 15px; background: #f5f5f5; border-radius: 5px;">
+          <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+            <div style="flex: 1; min-width: 200px;">
+              <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">🔍 Recherche</label>
+              <input type="text" id="pendingCompletedSearch" placeholder="Chercher par nom ou matricule..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+            </div>
+            <div style="min-width: 180px;">
+              <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">👔 Fonction</label>
+              <select id="pendingCompletedFonction" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                <option value="">-- Toutes --</option>
+              </select>
+            </div>
+            <div style="min-width: 180px;">
+              <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">🏢 Rattachement</label>
+              <select id="pendingCompletedRattachement" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                <option value="">-- Tous --</option>
+              </select>
+            </div>
+            <div style="min-width: 180px;">
+              <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">📊 Résultat</label>
+              <select id="pendingCompletedResultat" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                <option value="">-- Tous --</option>
+              </select>
+            </div>
+            <button id="pendingCompletedResetFilters" style="padding: 10px 15px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;">↺ Réinitialiser</button>
+          </div>
+        </div>
+
+        <!-- TABLE : DÉJÀ RETOURNÉE -->
         <div class="table-container" style="width: 100%; overflow-x: auto;">
           <table id="pendingCompletedTable" class="pending-table">
             <thead>
               <tr>
-                <th class="sortable-header" data-col="0" data-table="completed" style="cursor: pointer; user-select: none;">Matricule <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="1" data-table="completed" style="cursor: pointer; user-select: none;">Nom & Prénom <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="2" data-table="completed" style="cursor: pointer; user-select: none;">Fonction <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="3" data-table="completed" style="cursor: pointer; user-select: none;">Type Consultation <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="4" data-table="completed" style="cursor: pointer; user-select: none;">Lieu <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="5" data-table="completed" style="cursor: pointer; user-select: none;">Shift <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="6" data-table="completed" style="cursor: pointer; user-select: none;">Choix <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="7" data-table="completed" style="cursor: pointer; user-select: none;">Date <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="8" data-table="completed" style="cursor: pointer; user-select: none;">Heure Sortie <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="9" data-table="completed" style="cursor: pointer; user-select: none;">Heure Retour <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="10" data-table="completed" style="cursor: pointer; user-select: none;">Résultat <span class="sort-arrow">⬆️</span></th>
-                <th class="sortable-header" data-col="11" data-table="completed" style="cursor: pointer; user-select: none;">Jours RM <span class="sort-arrow">⬆️</span></th>
-              </tr>
-              <tr class="table-filter-row">
-                <th><input type="text" class="filter-completed-col" data-col="0" placeholder="🔍"></th>
-                <th><input type="text" class="filter-completed-col" data-col="1" placeholder="🔍"></th>
-                <th><input type="text" class="filter-completed-col" data-col="2" placeholder="🔍"></th>
-                <th><input type="text" class="filter-completed-col" data-col="3" placeholder="🔍"></th>
-                <th><input type="text" class="filter-completed-col" data-col="4" placeholder="🔍"></th>
-                <th><select class="filter-completed-col" data-col="5"><option value="">☐</option><option value="Jour">Jour</option><option value="Nuit">Nuit</option></select></th>
-                <th><select class="filter-completed-col" data-col="6"><option value="">☐</option><option value="Day off">Day off</option><option value="En poste">En poste</option></select></th>
-                <th><input type="date" class="filter-completed-col" data-col="7"></th>
-                <th><input type="text" class="filter-completed-col" data-col="8" placeholder="🔍"></th>
-                <th><input type="text" class="filter-completed-col" data-col="9" placeholder="🔍"></th>
-                <th><input type="text" class="filter-completed-col" data-col="10" placeholder="🔍"></th>
-                <th><input type="text" class="filter-completed-col" data-col="11" placeholder="🔍"></th>
+                <th>Matricule</th>
+                <th>Nom & Prénom</th>
+                <th>Fonction</th>
+                <th>Type Consultation</th>
+                <th>Lieu</th>
+                <th>Shift</th>
+                <th>Choix</th>
+                <th>Date</th>
+                <th>Heure Sortie</th>
+                <th>Heure Retour</th>
+                <th>Résultat</th>
+                <th>Nb Jours RM</th>
+                <th>Heure Entrée Ostie</th>
+                <th>Heure Sortie Ostie</th>
               </tr>
             </thead>
             <tbody id="pendingCompletedTableBody">
