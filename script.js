@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Utiliser la configuration du fichier config.js
   const API_URL = (typeof CONFIG !== 'undefined' && CONFIG.API_URL) 
     ? CONFIG.API_URL 
-    :"https://script.google.com/macros/s/AKfycbyBWBnCHGZlHPZHubXDjdCAA_F8uHanBHHjYnKxheOGexcmgKyiOjZSWotRO-owFyTRaA/exec";
+    :"https://script.google.com/macros/s/AKfycbys4FVCM3ATp5wHsQ8vMsG9SU2A5jLcralJUVXotQxYnijb9daB9iF_-hHTfhxQs727aQ/exec";
   
   const API_TIMEOUT = (typeof CONFIG !== 'undefined' && CONFIG.API_TIMEOUT) 
     ? CONFIG.API_TIMEOUT 
@@ -311,6 +311,22 @@ document.addEventListener("DOMContentLoaded", function () {
       return `${parts[2]}-${parts[1]}-${parts[0]}`;
     }
     return dateStr;
+  }
+
+  const RESULTAT_RETOUR_OPTIONS = [
+    { value: "Consultation médical", label: "Consultation médicale" },
+    { value: "Repos médical", label: "Repos médical" },
+    { value: "Assistante maternelle", label: "Assistante maternelle" },
+    { value: "Examens médicaux", label: "Examens médicaux" }
+  ];
+
+  function getResultatRetourLabel(value) {
+    const option = RESULTAT_RETOUR_OPTIONS.find(item => item.value === value);
+    return option ? option.label : (value || "");
+  }
+
+  function resultNeedsDays(value) {
+    return value === "Repos médical" || value === "Assistante maternelle";
   }
 
   function setDateTimeNow() {
@@ -743,7 +759,7 @@ document.addEventListener("DOMContentLoaded", function () {
       document.getElementById(sectionName).classList.add("active");
 
       if (sectionName === "dashboard") {
-        loadDashboardData();
+        void loadDashboardData();
         // Démarrer le refresh automatique du dashboard
         startAutoDashboardRefresh();
       } else {
@@ -1159,13 +1175,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
       const checkbox = item.querySelector(".waiting-checkbox");
       checkbox.addEventListener("change", function () {
-        if (this.checked) {
           // Décrocher tous les autres checkboxes
           document.querySelectorAll(".waiting-checkbox").forEach(cb => {
             if (cb !== this) cb.checked = false;
           });
           selectFromWaiting(index);
-        }
       });
 
       // Bouton X pour annuler - masqué pour PRODUCTION_VIEWER
@@ -1506,7 +1520,7 @@ document.addEventListener("DOMContentLoaded", function () {
         
         resetForm();
         // Recharger les consultations pour mettre à jour la liste en cache
-        await loadDashboardData();
+        void loadDashboardData();
       } else {
         showMessage("❌ Erreur : " + json.error, "error");
         btnSave.disabled = false;
@@ -2400,6 +2414,8 @@ document.addEventListener("DOMContentLoaded", function () {
           try {
             const row = document.createElement("tr");
             const rowId = `pending-${c.matricule}`;
+            const sheetRow = c.rowNumber || "";
+            row.dataset.sheetRow = sheetRow;
             
             const fonction = c.fonction || c.function || "";
             const typeConsultation = c.typeConsultation || c.type_consultation || "";
@@ -2416,21 +2432,22 @@ document.addEventListener("DOMContentLoaded", function () {
               <td>${c.choix || "-"}</td>
               <td>${extractAndCorrectDate(c.date) || "-"}</td>
               <td>${extractTimeFromISO(heureSortie) || ""}</td>
-              <td><input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}" data-row-id="${rowId}" ${c.heureRetour ? 'checked' : ''}></td>
-              <td><input type="time" class="time-retour" data-matricule="${c.matricule}" value="${c.heureRetour ? extractTimeFromISO(c.heureRetour) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
+              <td><input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}" data-row-id="${rowId}" data-sheet-row="${sheetRow}" ${c.heureRetour ? 'checked' : ''}></td>
+              <td><input type="time" class="time-retour" data-matricule="${c.matricule}" data-sheet-row="${sheetRow}" value="${c.heureRetour ? extractTimeFromISO(c.heureRetour) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
               <td>
-                <select class="select-resultat" data-matricule="${c.matricule}" ${c.heureRetour ? '' : 'disabled'} style="width:100%; padding:3px 4px; font-size:10px;">
+                <select class="select-resultat" data-matricule="${c.matricule}" data-sheet-row="${sheetRow}" ${c.heureRetour ? '' : 'disabled'} style="width:100%; padding:3px 4px; font-size:10px;">
                   <option value="">-- Sélectionner --</option>
-                  <option value="Consultation médical" ${c.resultat === 'Consultation médical' ? 'selected' : ''}>Consultation médical</option>
+                  <option value="Consultation médical" ${c.resultat === 'Consultation médical' ? 'selected' : ''}>Consultation médicale</option>
                   <option value="Repos médical" ${c.resultat === 'Repos médical' ? 'selected' : ''}>Repos médical</option>
                   <option value="Assistante maternelle" ${c.resultat === 'Assistante maternelle' ? 'selected' : ''}>Assistante maternelle</option>
+                  <option value="Examens médicaux" ${c.resultat === 'Examens médicaux' ? 'selected' : ''}>Examens médicaux</option>
                   <option value="Visite d'embauche" ${c.resultat === "Visite d'embauche" ? 'selected' : ''}>Visite d'embauche</option>
                 </select>
               </td>
-              <td><input type="number" class="input-nbjours" data-matricule="${c.matricule}" min="0.5" step="0.5" value="${c.nbJourRM || ''}" placeholder="J" ${(c.resultat === "Repos médical" || c.resultat === "Assistante maternelle") ? '' : 'style="display:none;"'}></td>
-              <td><input type="time" class="time-entree-ostie" data-matricule="${c.matricule}" value="${c.heureEntreeOstie ? extractTimeFromISO(c.heureEntreeOstie) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
-              <td><input type="time" class="time-sortie-ostie" data-matricule="${c.matricule}" value="${c.heureSortieOstie ? extractTimeFromISO(c.heureSortieOstie) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
-              <td><button class="btn-validate-retour" data-matricule="${c.matricule}" ${c.heureRetour ? '' : 'disabled'}>✓</button></td>
+              <td><input type="number" class="input-nbjours" data-matricule="${c.matricule}" data-sheet-row="${sheetRow}" min="0.5" step="0.5" value="${c.nbJourRM || ''}" placeholder="J" ${resultNeedsDays(c.resultat) ? '' : 'style="display:none;"'}></td>
+              <td><input type="time" class="time-entree-ostie" data-matricule="${c.matricule}" data-sheet-row="${sheetRow}" value="${c.heureEntreeOstie ? extractTimeFromISO(c.heureEntreeOstie) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
+              <td><input type="time" class="time-sortie-ostie" data-matricule="${c.matricule}" data-sheet-row="${sheetRow}" value="${c.heureSortieOstie ? extractTimeFromISO(c.heureSortieOstie) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
+              <td><button class="btn-validate-retour" data-matricule="${c.matricule}" data-sheet-row="${sheetRow}" ${c.heureRetour ? '' : 'disabled'}>✓</button></td>
             `;
             waitingTableBody.appendChild(row);
           } catch (rowError) {
@@ -2460,7 +2477,7 @@ document.addEventListener("DOMContentLoaded", function () {
           <td>${extractAndCorrectDate(c.date) || "-"}</td>
           <td>${extractTimeFromISO(c.heureSortie)}</td>
           <td>${extractTimeFromISO(c.heureRetour) || "-"}</td>
-          <td>${c.resultat || "-"}</td>
+          <td>${getResultatRetourLabel(c.resultat) || "-"}</td>
           <td>${c.nbJourRM || "-"}</td>
           <td>${c.heureEntreeOstie ? extractTimeFromISO(c.heureEntreeOstie) : "-"}</td>
           <td>${c.heureSortieOstie ? extractTimeFromISO(c.heureSortieOstie) : "-"}</td>
@@ -2713,7 +2730,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const selectedValue = this.value;
         
         // Afficher/masquer le champ jours
-        if (selectedValue === "Repos médical" || selectedValue === "Assistante maternelle") {
+        if (resultNeedsDays(selectedValue)) {
           inputJours.style.display = "inline-block";
           inputJours.disabled = false;
           inputJours.focus();
@@ -2730,6 +2747,7 @@ document.addEventListener("DOMContentLoaded", function () {
       btn.addEventListener("click", async function (e) {
         e.preventDefault();
         const matricule = this.dataset.matricule;
+        const sheetRow = this.dataset.sheetRow || this.closest("tr")?.dataset.sheetRow || "";
         const row = this.closest("tr");
         const timeInput = row.querySelector(".time-retour");
         const selectResultat = row.querySelector(".select-resultat");
@@ -2743,7 +2761,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         
         // Vérifier que les jours sont remplis si nécessaire
-        if ((selectedResult === "Repos médical" || selectedResult === "Assistante maternelle") && !inputJours.value) {
+        if (resultNeedsDays(selectedResult) && !inputJours.value) {
           showMessage("❌ Veuillez entrer le nombre de jours", "error");
           inputJours.focus();
           return;
@@ -2758,6 +2776,7 @@ document.addEventListener("DOMContentLoaded", function () {
           action: "setRetour",
           password: userPassword,
           matricule: matricule,
+          rowNumber: sheetRow,
           heureRetour: timeInput.value,
           resultat: selectedResult,
           nbJourRM: inputJours.value || "",
@@ -2768,22 +2787,24 @@ document.addEventListener("DOMContentLoaded", function () {
         try {
           this.disabled = true;
           this.textContent = "⏳ Enregistrement...";
-          
-          const res = await fetch(`${API_URL}?${params}`);
-          const json = await res.json();
 
-          if (json.success) {
-            showMessage("✅ Retour enregistré avec succès");
-            
-            // Recharger la liste après enregistrement
-            setTimeout(() => {
-              loadDashboardData();
-            }, 1000);
-          } else {
-            showMessage("❌ Erreur : " + json.error, "error");
-            this.disabled = false;
-            this.textContent = "✓ Valider";
-          }
+          fetch(`${API_URL}?${params}`)
+            .then(async res => {
+              const json = await res.json();
+              if (!json.success) {
+                throw new Error(json.error || "Erreur inconnue");
+              }
+              // ✅ Actualisation des données après sauvegarde réussie
+              showMessage("✅ Retour enregistré, actualisation en cours...");
+              void loadDashboardData();
+            })
+            .catch(error => {
+              console.error("Erreur enregistrement retour:", error);
+              showMessage("❌ Erreur : " + error.message, "error");
+              // Reset button on error so user knows something went wrong
+              this.disabled = false;
+              this.textContent = "✓ Valider";
+            });
         } catch (e) {
           console.error("Erreur:", e);
           showMessage("❌ Erreur serveur", "error");
@@ -2837,7 +2858,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const inputJours = this.parentElement.querySelector(".input-nbjours");
         const timeRetourInput = this.parentElement.querySelector(".time-retour");
         
-        if (this.value === "Repos médical" || this.value === "Assistante maternelle") {
+        if (resultNeedsDays(this.value)) {
           inputJours.style.display = "inline-block";
           inputJours.disabled = false;
           inputJours.focus();
@@ -2876,13 +2897,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
     document.querySelectorAll(".btn-confirm-retour").forEach(btn => {
       btn.addEventListener("click", async function () {
-        // Vérification de permissions: bloquer si mode production (readonly)
         if (userPermissions === "readonly") {
           showMessage("❌ Accès refusé: Mode production en lecture seule", "error");
           return;
         }
 
         const matricule = this.dataset.matricule;
+        const sheetRow = this.dataset.sheetRow || this.closest("tr")?.dataset.sheetRow || "";
         const timeInput = this.parentElement.querySelector(".time-retour");
         const selectResultat = this.parentElement.querySelector(".select-resultat");
         const inputJours = this.parentElement.querySelector(".input-nbjours");
@@ -2893,7 +2914,7 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
         }
 
-        if ((selectResultat.value === "Repos médical" || selectResultat.value === "Assistante maternelle") && (!inputJours.value || parseFloat(inputJours.value) <= 0)) {
+        if (resultNeedsDays(selectResultat.value) && (!inputJours.value || parseFloat(inputJours.value) <= 0)) {
           showMessage("❌ Le nombre de jours est obligatoire", "error");
           return;
         }
@@ -2902,26 +2923,33 @@ document.addEventListener("DOMContentLoaded", function () {
           action: "setRetour",
           password: userPassword,
           matricule: matricule,
+          rowNumber: sheetRow,
           heureRetour: timeInput.value,
           resultat: selectResultat.value,
           nbJourRM: inputJours.value,
           commentaires: ""
         });
 
-        try {
-          const res = await fetch(`${API_URL}?${params}`);
-          const json = await res.json();
+        this.disabled = true;
+        this.textContent = "⏳ Enregistrement...";
 
-          if (json.success) {
-            showMessage("✅ Retour enregistré !");
-            loadDashboardData();
-          } else {
-            showMessage("❌ Erreur : " + json.error, "error");
-          }
-        } catch (e) {
-          console.error(e);
-          showMessage("❌ Erreur serveur", "error");
-        }
+        fetch(`${API_URL}?${params}`)
+          .then(async res => {
+            const json = await res.json();
+            if (!json.success) {
+              throw new Error(json.error || "Erreur inconnue");
+            }
+            // ✅ Actualisation des données après sauvegarde réussie
+            showMessage("✅ Retour enregistré, actualisation en cours...");
+            void loadDashboardData();
+          })
+          .catch(error => {
+            console.error(error);
+            showMessage("❌ Erreur : " + error.message, "error");
+            // Reset button on error so user knows something went wrong
+            this.disabled = false;
+            this.textContent = "✓ Valider";
+          });
       });
     });
 
@@ -2930,6 +2958,7 @@ document.addEventListener("DOMContentLoaded", function () {
       input.addEventListener("change", async function () {
         const matricule = this.closest("tr").querySelector(".checkbox-retour").dataset.matricule;
         const row = this.closest("tr");
+        const sheetRow = this.dataset.sheetRow || row.dataset.sheetRow || "";
         const timeEntreeOstie = row.querySelector(".time-entree-ostie");
         const timeSortieOstie = row.querySelector(".time-sortie-ostie");
         
@@ -2940,30 +2969,25 @@ document.addEventListener("DOMContentLoaded", function () {
           action: "setTempsOstie",
           password: userPassword,
           matricule: matricule,
+          rowNumber: sheetRow,
           heureEntreeOstie: timeEntreeOstie?.value || "",
           heureSortieOstie: timeSortieOstie?.value || ""
         });
 
-        try {
-          const res = await fetch(`${API_URL}?${params}`);
-          const json = await res.json();
-          
-          if (json.success) {
+        fetch(`${API_URL}?${params}`)
+          .then(async res => {
+            const json = await res.json();
+            if (!json.success) {
+              throw new Error(json.message || json.error || "Erreur inconnue");
+            }
             console.log(`✅ Temps Ostie enregistrés pour ${matricule}`);
-            showMessage(`✅ Temps Ostie enregistrés pour ${matricule}`);
-            
-            // Recharger les données après enregistrement
-            setTimeout(() => {
-              loadDashboardData();
-            }, 500);
-          } else {
-            console.error("❌ Erreur lors de l'enregistrement des temps Ostie:", json.message);
-            showMessage(`❌ Erreur: ${json.message}`, "error");
-          }
-        } catch (error) {
-          console.error("❌ Erreur réseau:", error);
-          showMessage("❌ Erreur réseau lors de l'enregistrement", "error");
-        }
+            showMessage(`✅ Temps Ostie envoyés pour ${matricule}, actualisation en cours...`);
+            void loadDashboardData();
+          })
+          .catch(error => {
+            console.error("❌ Erreur lors de l'enregistrement des temps Ostie:", error);
+            showMessage(`❌ Erreur: ${error.message}`, "error");
+          });
       });
     });
   }
@@ -2979,7 +3003,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     let valid = checkbox.checked && timeRetour.value && selectResultat.value;
     
-    if (valid && (selectResultat.value === "Repos médical" || selectResultat.value === "Assistante maternelle")) {
+    if (valid && resultNeedsDays(selectResultat.value)) {
       valid = inputJours.value && parseFloat(inputJours.value) > 0;
     }
 
@@ -3075,7 +3099,7 @@ document.addEventListener("DOMContentLoaded", function () {
       Array.from(resultats).sort().forEach(r => {
         const option = document.createElement("option");
         option.value = r;
-        option.textContent = r;
+        option.textContent = getResultatRetourLabel(r);
         filterTodayResultat.appendChild(option);
       });
     }
@@ -4319,7 +4343,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (json.success) {
         showMessage("Vérification des anomalies effectuée ! Les consultations non fermées depuis plus de 24h ont été marquées comme 'anomalie'.");
         // Recharger les données
-        loadDashboardData();
+        void loadDashboardData();
       } else {
         showMessage("Erreur : " + json.error, "error");
       }

@@ -133,6 +133,7 @@ function doGet(e) {
       
       const data = {
         matricule: e.parameter.matricule,
+        rowNumber: e.parameter.rowNumber || "",
         heureRetour: e.parameter.heureRetour,
         resultat: e.parameter.resultat,
         nbJourRM: e.parameter.nbJourRM || "",
@@ -155,6 +156,7 @@ function doGet(e) {
       
       const data = {
         matricule: e.parameter.matricule,
+        rowNumber: e.parameter.rowNumber || "",
         heureEntreeOstie: e.parameter.heureEntreeOstie || "",
         heureSortieOstie: e.parameter.heureSortieOstie || ""
       };
@@ -420,7 +422,8 @@ function getConsultations(password) {
   // E=Type consultation, F=Lieu consultation, G=Shift,
   // H=Choix, I=Date, J=Heure sortie, K=Heure retour, L=Résultat, M=Jours RM, 
   // N=Anomalie, O=Cas grave, P=Commentaires, Q=Heure Entrée Ostie, R=Heure Sortie Ostie
-  let consultations = data.map(r => ({
+  let consultations = data.map((r, index) => ({
+    rowNumber: index + 2,
     matricule: r[0],
     nom: r[1],
     fonction: r[2],
@@ -482,11 +485,14 @@ function saveConsultation(d) {
 
   // Récupérer les données du collaborateur depuis "Grande"
   const grandeSheet = ss.getSheetByName("Grande");
-  const grandeData = grandeSheet.getDataRange().getValues();
+  const grandeLastRow = grandeSheet.getLastRow();
+  const grandeData = grandeLastRow > 1
+    ? grandeSheet.getRange(2, 1, grandeLastRow - 1, 4).getValues()
+    : [];
   let fonction = "";
   let rattachement = "";
 
-  for (let i = 1; i < grandeData.length; i++) {
+  for (let i = 0; i < grandeData.length; i++) {
     if (grandeData[i][0] == d.matricule) {
       fonction = grandeData[i][2];
       rattachement = grandeData[i][3];
@@ -525,43 +531,65 @@ function setRetour(d) {
   
   // ========== ÉTAPE 1: CRÉER LES COLONNES SI MANQUANTES ==========
   ensureColumnsExist();
+
+  const rowNumber = parseInt(d.rowNumber, 10);
+  if (Number.isFinite(rowNumber) && rowNumber > 1) {
+    const sheetMatricule = String(sheet.getRange(rowNumber, 1).getValue() || "").trim();
+    if (!sheetMatricule) {
+      throw new Error(`Ligne introuvable: ${rowNumber}`);
+    }
+    if (String(d.matricule || "").trim() && sheetMatricule !== String(d.matricule).trim()) {
+      throw new Error(`Matricule incohérent pour la ligne ${rowNumber}`);
+    }
+  } else {
+    throw new Error("Numéro de ligne invalide");
+  }
+
+  const heureRetourCell = sheet.getRange(rowNumber, 11);
+  const heureRetourExistante = String(heureRetourCell.getValue() || "").trim();
+
+  if (heureRetourExistante !== "") {
+    throw new Error(`Retour déjà enregistré pour ${d.matricule}`);
+  }
+
+  // Déterminer les index précis des colonnes Q et R
+  const lastCol = sheet.getLastColumn();
+  const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   
-  const data = sheet.getDataRange().getValues();
-
-  // Trouver la ligne avec ce matricule ET heureRetour vide
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] == d.matricule && data[i][10] === "") {
-      // Déterminer les index précis des colonnes Q et R
-      const lastCol = sheet.getLastColumn();
-      const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-      
-      let heureEntreeOstieCol = 17; // Par défaut Colonne Q = 17
-      let heureSortieOstieCol = 18; // Par défaut Colonne R = 18
-      
-      // Trouver les vraies colonnes
-      for (let col = 0; col < headerRow.length; col++) {
-        if (headerRow[col] === "Heure Entrée Ostie" || headerRow[col] === "heureEntreeOstie") {
-          heureEntreeOstieCol = col + 1;
-        }
-        if (headerRow[col] === "Heure Sortie Ostie" || headerRow[col] === "heureSortieOstie") {
-          heureSortieOstieCol = col + 1;
-        }
-      }
-      
-      // Sauvegarder toutes les données
-      sheet.getRange(i + 1, 11).setValue(d.heureRetour);  // K = Heure Retour
-      sheet.getRange(i + 1, 12).setValue(d.resultat);     // L = Résultat
-      sheet.getRange(i + 1, 13).setValue(d.nbJourRM);     // M = Nb jours RM
-      sheet.getRange(i + 1, 14).setValue(d.anomalie || "");     // N = Anomalie
-      sheet.getRange(i + 1, 15).setValue(d.casGrave || ""); // O = Cas grave
-      sheet.getRange(i + 1, 16).setValue(d.commentaires); // P = Commentaires
-      sheet.getRange(i + 1, heureEntreeOstieCol).setValue(d.heureEntreeOstie || ""); // Q = Heure Entrée Ostie
-      sheet.getRange(i + 1, heureSortieOstieCol).setValue(d.heureSortieOstie || ""); // R = Heure Sortie Ostie
-
-      console.log(`✅ Retour enregistré pour ${d.matricule}`);
-      break;
+  let heureEntreeOstieCol = 17; // Par défaut Colonne Q = 17
+  let heureSortieOstieCol = 18; // Par défaut Colonne R = 18
+  
+  // Trouver les vraies colonnes
+  for (let col = 0; col < headerRow.length; col++) {
+    if (headerRow[col] === "Heure Entrée Ostie" || headerRow[col] === "heureEntreeOstie") {
+      heureEntreeOstieCol = col + 1;
+    }
+    if (headerRow[col] === "Heure Sortie Ostie" || headerRow[col] === "heureSortieOstie") {
+      heureSortieOstieCol = col + 1;
     }
   }
+  
+  // Sauvegarder toutes les données avec moins d'appels serveur
+  sheet.getRange(rowNumber, 11, 1, 6).setValues([[
+    d.heureRetour,
+    d.resultat,
+    d.nbJourRM,
+    d.anomalie || "",
+    d.casGrave || "",
+    d.commentaires
+  ]]);
+
+  if (heureEntreeOstieCol === heureSortieOstieCol - 1) {
+    sheet.getRange(rowNumber, heureEntreeOstieCol, 1, 2).setValues([[
+      d.heureEntreeOstie || "",
+      d.heureSortieOstie || ""
+    ]]);
+  } else {
+    sheet.getRange(rowNumber, heureEntreeOstieCol).setValue(d.heureEntreeOstie || "");
+    sheet.getRange(rowNumber, heureSortieOstieCol).setValue(d.heureSortieOstie || "");
+  }
+
+  console.log(`✅ Retour enregistré pour ${d.matricule}`);
 }
 
 // ================= SET TEMPS OSTIE =================
@@ -571,36 +599,48 @@ function setTempsOstie(d) {
   
   // ========== ÉTAPE 1: CRÉER LES COLONNES SI MANQUANTES ==========
   ensureColumnsExist();
-  
-  const data = sheet.getDataRange().getValues();
 
-  // Trouver la ligne avec ce matricule
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] == d.matricule) {
-      // Déterminer les index précis des colonnes Q et R
-      const lastCol = sheet.getLastColumn();
-      const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-      
-      let heureEntreeOstieCol = 17; // Par défaut Colonne Q = 17
-      let heureSortieOstieCol = 18; // Par défaut Colonne R = 18
-      
-      // Trouver les vraies colonnes
-      for (let col = 0; col < headerRow.length; col++) {
-        if (headerRow[col] === "Heure Entrée Ostie" || headerRow[col] === "heureEntreeOstie") {
-          heureEntreeOstieCol = col + 1;
-        }
-        if (headerRow[col] === "Heure Sortie Ostie" || headerRow[col] === "heureSortieOstie") {
-          heureSortieOstieCol = col + 1;
-        }
-      }
-      
-      sheet.getRange(i + 1, heureEntreeOstieCol).setValue(d.heureEntreeOstie || "");
-      sheet.getRange(i + 1, heureSortieOstieCol).setValue(d.heureSortieOstie || "");
-      
-      console.log(`✅ Temps Ostie enregistrés pour ${d.matricule} - Entrée: ${d.heureEntreeOstie}, Sortie: ${d.heureSortieOstie}`);
-      break;
+  const rowNumber = parseInt(d.rowNumber, 10);
+  if (Number.isFinite(rowNumber) && rowNumber > 1) {
+    const sheetMatricule = String(sheet.getRange(rowNumber, 1).getValue() || "").trim();
+    if (!sheetMatricule) {
+      throw new Error(`Ligne introuvable: ${rowNumber}`);
+    }
+    if (String(d.matricule || "").trim() && sheetMatricule !== String(d.matricule).trim()) {
+      throw new Error(`Matricule incohérent pour la ligne ${rowNumber}`);
+    }
+  } else {
+    throw new Error("Numéro de ligne invalide");
+  }
+
+  // Déterminer les index précis des colonnes Q et R
+  const lastCol = sheet.getLastColumn();
+  const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  
+  let heureEntreeOstieCol = 17; // Par défaut Colonne Q = 17
+  let heureSortieOstieCol = 18; // Par défaut Colonne R = 18
+  
+  // Trouver les vraies colonnes
+  for (let col = 0; col < headerRow.length; col++) {
+    if (headerRow[col] === "Heure Entrée Ostie" || headerRow[col] === "heureEntreeOstie") {
+      heureEntreeOstieCol = col + 1;
+    }
+    if (headerRow[col] === "Heure Sortie Ostie" || headerRow[col] === "heureSortieOstie") {
+      heureSortieOstieCol = col + 1;
     }
   }
+  
+  if (heureEntreeOstieCol === heureSortieOstieCol - 1) {
+    sheet.getRange(rowNumber, heureEntreeOstieCol, 1, 2).setValues([[
+      d.heureEntreeOstie || "",
+      d.heureSortieOstie || ""
+    ]]);
+  } else {
+    sheet.getRange(rowNumber, heureEntreeOstieCol).setValue(d.heureEntreeOstie || "");
+    sheet.getRange(rowNumber, heureSortieOstieCol).setValue(d.heureSortieOstie || "");
+  }
+  
+  console.log(`✅ Temps Ostie enregistrés pour ${d.matricule} - Entrée: ${d.heureEntreeOstie}, Sortie: ${d.heureSortieOstie}`);
 }
 
 // ================= CALCULATE AVERAGE DURATION =================
