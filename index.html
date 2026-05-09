@@ -433,15 +433,21 @@
           <table id="todayConsultationsTable" class="report-table" style="width: 100%; font-size: 13px;">
             <thead>
               <tr>
-                <th>Nom</th>
                 <th>Matricule</th>
-                <th>Type</th>
+                <th>Nom & Prénom</th>
+                <th>Fonction</th>
+                <th>Statut</th>
+                <th>Type Consultation</th>
                 <th>Lieu</th>
                 <th>Shift</th>
+                <th>Choix</th>
+                <th>Date</th>
                 <th>Heure Sortie</th>
                 <th>Heure Retour</th>
                 <th>Résultat</th>
-                <th>Statut</th>
+                <th>Nb Jours RM</th>
+                <th>Heure Entrée Ostie</th>
+                <th>Heure Sortie Ostie</th>
               </tr>
             </thead>
             <tbody id="todayConsultationsBody">
@@ -462,9 +468,6 @@
       <!-- NAVIGATION TABS -->
       <div class="rapport-tabs">
         <button class="rapport-tab-btn active" data-target="rapport-consultations">Rapport</button>
-        <button class="rapport-tab-btn" data-target="rapport-taux">Taux Consultation</button>
-        <button class="rapport-tab-btn" data-target="rapport-charts">Graphiques</button>
-        <button class="rapport-tab-btn" data-target="rapport-collaborateurs">Collaborateurs</button>
         <button class="rapport-tab-btn" data-target="rapport-synthese">Synthèses</button>
       </div>
 
@@ -582,101 +585,7 @@
           </div>
         </div>
 
-        <!-- SECTION 2: TAUX DE CONSULTATION PAR RATTACHEMENT -->
-        <div id="rapport-taux" class="rapport-section-content" style="display: none;">
-          <h3>📊 Taux de Consultation par Rattachement</h3>
-
-          <!-- FILTRES TAUX -->
-          <div class="filter-section" style="margin-bottom: 20px;">
-            <div class="filter-row">
-              <div class="filter-group">
-                <label>📅 De:</label>
-                <input type="date" id="filterTauxFromDate">
-              </div>
-              <div class="filter-group">
-                <label>📅 À:</label>
-                <input type="date" id="filterTauxToDate">
-              </div>
-              <div class="filter-group">
-                <label>🏢 Rattachement:</label>
-                <select id="filterTauxRattachement">
-                  <option value="">-- Tous --</option>
-                </select>
-              </div>
-              <div class="filter-group">
-                <label>👔 Fonction:</label>
-                <select id="filterTauxFonction">
-                  <option value="">-- Tous --</option>
-                </select>
-              </div>
-              <button id="btnFilterTaux" class="btn-filter">🔍 Filtrer</button>
-              <button id="btnResetTaux" class="btn-reset">↺ Réinitialiser</button>
-            </div>
-          </div>
-
-          <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Nombre de personnes qui ont eu au moins une consultation / Total de collaborateurs</p>
-          <div id="consultationRatesContainer" class="consultation-rates-grid">
-            <!-- Les cartes de taux s'affichent ici -->
-          </div>
-        </div>
-
-        <!-- SECTION 3: GRAPHIQUES RAPPORT -->
-        <div id="rapport-charts" class="rapport-section-content" style="display: none;">
-          <h3>📊 Répartition Analyses</h3>
-
-          <!-- FILTRES GRAPHIQUES -->
-          <div class="filter-section" style="margin-bottom: 20px;">
-            <div class="filter-row">
-              <div class="filter-group">
-                <label>📅 De:</label>
-                <input type="date" id="filterChartsFromDate">
-              </div>
-              <div class="filter-group">
-                <label>📅 À:</label>
-                <input type="date" id="filterChartsToDate">
-              </div>
-              <div class="filter-group">
-                <label>🏢 Rattachement:</label>
-                <select id="filterChartsRattachement">
-                  <option value="">-- Tous --</option>
-                </select>
-              </div>
-              <div class="filter-group">
-                <label>👔 Fonction:</label>
-                <select id="filterChartsFonction">
-                  <option value="">-- Tous --</option>
-                </select>
-              </div>
-              <button id="btnFilterCharts" class="btn-filter">🔍 Filtrer</button>
-              <button id="btnResetCharts" class="btn-reset">↺ Réinitialiser</button>
-            </div>
-          </div>
-
-          <div class="report-charts-grid">
-            <div class="chart-container">
-              <h4>📊 Répartition Résultats</h4>
-              <canvas id="chartReportResultats"></canvas>
-            </div>
-            <div class="chart-container">
-              <h4>📍 Consultations par Lieu</h4>
-              <canvas id="chartReportLieu"></canvas>
-            </div>
-            <div class="chart-container">
-              <h4>📌 Répartition Choix</h4>
-              <canvas id="chartReportChoix"></canvas>
-            </div>
-            <div class="chart-container">
-              <h4>🌙 Répartition Shift</h4>
-              <canvas id="chartReportShift"></canvas>
-            </div>
-            <div class="chart-container">
-              <h4>📉 Tendance Consultation vs RM/Assistante</h4>
-              <canvas id="chartReportTendance"></canvas>
-            </div>
-          </div>
-        </div>
-
-        <!-- SECTION 4: CONSULTATIONS PAR COLLABORATEUR (AVEC TRI) -->
+        <!-- SECTION 2: CONSULTATIONS PAR COLLABORATEUR (AVEC TRI) -->
         <div id="rapport-collaborateurs" class="rapport-section-content" style="display: none;">
           <h3>👥 Consultations par Collaborateur</h3>
 
@@ -764,6 +673,7 @@
               </div>
               <button id="btnFilterSynthese" class="btn-filter">🔍 Filtrer</button>
               <button id="btnResetSynthese" class="btn-reset">↺ Réinitialiser</button>
+              <button id="btnExportSyntheseExcel" class="btn-previous">⬇ Exporter non-retour</button>
             </div>
           </div>
           

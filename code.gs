@@ -1,74 +1,9 @@
 // ================= CONFIG =================
 const SHEET_ID = "1wuDhND9dj2_sEbnTj_Ui5SUbZY-Yhmj7kfjauBJD91I";
 const TIME_ZONE = "Africa/Johannesburg"; // Madagascar timezone (UTC+3)
-
-// ================= LOGIN CREDENTIALS =================
-// CAS 1: username="admin", password="ostie" → Tous les rattachements, tout est permis (formulaire, insertion, modification)
-// CAS 2: username="admin", password="production" → Tous les rattachements, LECTURE SEULE (dashboards et rapports)
-const LOGIN_CONFIG = {
-  "ostie": {
-    username: "admin",
-    password: "ostie",
-    type: "OSTIE_ADMIN",
-    permissions: "all",  // Tous les permis: formulaire, insertion, modification
-    rattachements: [] // Pas de filtre = tous les rattachements
-  },
-  "production": {
-    username: "admin",
-    password: "production",
-    type: "PRODUCTION_VIEWER",
-    permissions: "readonly",  // Lecture seule: dashboards et rapports
-    rattachements: [] // Pas de filtre = tous les rattachements
-  }
-};
-
-// ================= HELPER: GET USER TYPE FROM PASSWORD =================
-function getUserTypeFromPassword(password) {
-  for (const key in LOGIN_CONFIG) {
-    const config = LOGIN_CONFIG[key];
-    if (config.password === password) {
-      return config.type;
-    }
-  }
-  return null;
-}
-
-// ================= HELPER: CHECK ACTION PERMISSIONS =================
-// Actions autorisées pour PRODUCTION_VIEWER:
-// - addToWaiting (ajout à l'attente)
-// - getWaitingList (lecture liste d'attente)
-// - getCollaborateurs (lecture collaborateurs)
-// - getCartes (lecture dashboards)
-// - getConsultations (lecture consultations en lecture seule)
-// - getConsultationRates (lecture taux de consultation)
-// 
-// Actions INTERDITES pour PRODUCTION_VIEWER:
-// - saveConsultation
-// - setRetour
-// - removeFromWaiting
-// - checkAnomalies
-function isActionAllowed(userType, action) {
-  const allowedForProductionViewer = [
-    "addToWaiting",
-    "getWaitingList",
-    "getCollaborateurs",
-    "getCartes",
-    "getConsultations",
-    "getConsultationRates"
-  ];
-  
-  // OSTIE_ADMIN can do everything
-  if (userType === "OSTIE_ADMIN") {
-    return true;
-  }
-  
-  // PRODUCTION_VIEWER has limited actions
-  if (userType === "PRODUCTION_VIEWER") {
-    return allowedForProductionViewer.includes(action);
-  }
-  
-  return false;
-}
+ 
+// Note: login/permission logic removed to simplify usage.
+// All actions are allowed and no password-based filtering is applied.
 
 // ================= DO GET =================
 function doGet(e) {
@@ -80,26 +15,14 @@ function doGet(e) {
   const action = e.parameter.action;
 
   try {
-    if (action === "validateLogin") {
-      const username = e.parameter.username;
-      const password = e.parameter.password;
-      return output(validateLogin(username, password));
-    }
+    
     if (action === "getCartes") {
-      const password = e.parameter.password;
-      return output({ success: true, data: getCartes(password) });
+      return output({ success: true, data: getCartes() });
     }
     if (action === "getCollaborateurs") {
       return output({ success: true, data: getCollaborateurs() });
     }
     if (action === "saveConsultation") {
-      const password = e.parameter.password;
-      const userType = getUserTypeFromPassword(password);
-      
-      if (!isActionAllowed(userType, action)) {
-        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission d'ajouter une consultation" });
-      }
-      
       const data = {
         matricule: e.parameter.matricule,
         nom: e.parameter.nom,
@@ -120,17 +43,9 @@ function doGet(e) {
       return output({ success: true });
     }
     if (action === "getConsultations") {
-      const password = e.parameter.password;
-      return output({ success: true, data: getConsultations(password) });
+      return output({ success: true, data: getConsultations() });
     }
     if (action === "setRetour") {
-      const password = e.parameter.password;
-      const userType = getUserTypeFromPassword(password);
-      
-      if (!isActionAllowed(userType, action)) {
-        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission de modifier le retour" });
-      }
-      
       const data = {
         matricule: e.parameter.matricule,
         rowNumber: e.parameter.rowNumber || "",
@@ -147,13 +62,6 @@ function doGet(e) {
       return output({ success: true });
     }
     if (action === "setTempsOstie") {
-      const password = e.parameter.password;
-      const userType = getUserTypeFromPassword(password);
-      
-      if (!isActionAllowed(userType, action)) {
-        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission" });
-      }
-      
       const data = {
         matricule: e.parameter.matricule,
         rowNumber: e.parameter.rowNumber || "",
@@ -164,28 +72,13 @@ function doGet(e) {
       return output({ success: true });
     }
     if (action === "checkAnomalies") {
-      const password = e.parameter.password;
-      const userType = getUserTypeFromPassword(password);
-      
-      if (!isActionAllowed(userType, action)) {
-        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission de vérifier les anomalies" });
-      }
-      
       checkAndCloseAnomalies();
       return output({ success: true, message: "Vérification anomalies effectuée" });
     }
     if (action === "getConsultationRates") {
-      const password = e.parameter.password;
-      return output({ success: true, data: calculateConsultationRates(password) });
+      return output({ success: true, data: calculateConsultationRates() });
     }
     if (action === "addToWaiting") {
-      const password = e.parameter.password;
-      const userType = getUserTypeFromPassword(password);
-      
-      if (!isActionAllowed(userType, action)) {
-        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission d'ajouter à la liste d'attente" });
-      }
-      
       const data = {
         matricule: e.parameter.matricule,
         nom: e.parameter.nom,
@@ -200,13 +93,6 @@ function doGet(e) {
       return output({ success: true, data: getWaitingList() });
     }
     if (action === "removeFromWaiting") {
-      const password = e.parameter.password;
-      const userType = getUserTypeFromPassword(password);
-      
-      if (!isActionAllowed(userType, action)) {
-        return output({ success: false, error: "❌ Accès refusé: Vous n'avez pas la permission de supprimer de la liste d'attente" });
-      }
-      
       const matricule = e.parameter.matricule;
       removeFromWaitingList(matricule);
       return output({ success: true });
@@ -217,30 +103,12 @@ function doGet(e) {
   }
 }
 
-// ================= VALIDATE LOGIN =================
-function validateLogin(username, password) {
-  for (const key in LOGIN_CONFIG) {
-    const config = LOGIN_CONFIG[key];
-    if (config.username === username && config.password === password) {
-      return {
-        success: true,
-        message: "Login réussi",
-        type: config.type,
-        permissions: config.permissions,
-        rattachements: config.rattachements
-      };
-    }
-  }
-  return {
-    success: false,
-    message: "❌ Identifiant ou mot de passe incorrect"
-  };
-}
+// Login validation removed — public access to endpoints
 
 // ================= CALCULATE CONSULTATION RATES =================
 // Calcule le taux de consultation par rattachement
 // Taux = Nombre de personnes uniques qui ont eu une consultation / Total de collaborateurs
-function calculateConsultationRates(password) {
+function calculateConsultationRates() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   
   // Récupérer les collaborateurs de la feuille "Grande"
@@ -253,15 +121,8 @@ function calculateConsultationRates(password) {
   const ostieData = ostieSheet.getDataRange().getValues();
   ostieData.shift(); // enlever header
   
-  // Déterminer les rattachements autorisés
+  // Accès public: aucun filtrage par rattachement (liste vide = tous)
   let allowedRattachements = [];
-  for (const key in LOGIN_CONFIG) {
-    const config = LOGIN_CONFIG[key];
-    if (config.password === password) {
-      allowedRattachements = config.rattachements;
-      break;
-    }
-  }
   
   // Créer une map: rattachement -> {totalColaborateurs, uniquePersonnes}
   let ratesMap = {};
@@ -320,7 +181,7 @@ function calculateConsultationRates(password) {
 
 // ================= GET CARTES (Cartes visuelles pour chaque rattachement) =================
 // Génère des cartes visuelles pour chaque rattachement avec statistiques
-function getCartes(password) {
+function getCartes() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName("OSTIE");
   const data = sheet.getDataRange().getValues();
@@ -329,15 +190,8 @@ function getCartes(password) {
   
   data.shift(); // enlever header
   
-  // Déterminer les rattachements autorisés
+  // Accès public: aucun filtrage par rattachement (liste vide = tous)
   let allowedRattachements = [];
-  for (const key in LOGIN_CONFIG) {
-    const config = LOGIN_CONFIG[key];
-    if (config.password === password) {
-      allowedRattachements = config.rattachements;
-      break;
-    }
-  }
   
   // Récupérer tous les rattachements uniques
   let rattachements = new Set();
@@ -388,11 +242,8 @@ function getCollaborateurs() {
 }
 
 // ================= GET CONSULTATIONS =================
-// @param {string} password - Mot de passe pour déterminer le filtre des rattachements
-// CAS 1: password="Comete" → filtre rattachement="Comete"
-// CAS 2: password="Inshore" → filtre MVOLA, YAS, OPENFIELD
-// CAS 3: password="ostie" → tous les rattachements
-function getConsultations(password) {
+// Renvoie toutes les consultations (plus de filtrage par mot de passe)
+function getConsultations() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName("OSTIE");
   
@@ -407,15 +258,8 @@ function getConsultations(password) {
   
   data.shift(); // enlever header
 
-  // Déterminer les rattachements autorisés en fonction du mot de passe
+  // Accès public: aucun filtrage par rattachement (liste vide = tous)
   let allowedRattachements = [];
-  for (const key in LOGIN_CONFIG) {
-    const config = LOGIN_CONFIG[key];
-    if (config.password === password) {
-      allowedRattachements = config.rattachements;
-      break;
-    }
-  }
 
   // STRUCTURE RÉELLE DU SPREADSHEET:
   // A=Matricule, B=Nom, C=Fonction, D=Rattachement, 
@@ -445,7 +289,7 @@ function getConsultations(password) {
   }));
 
   // FILTRER par rattachement si la liste n'est pas vide
-  // (si liste vide = tous les rattachements = password "ostie")
+  // (si liste vide = tous les rattachements)
   if (allowedRattachements.length > 0) {
     consultations = consultations.filter(c => 
       allowedRattachements.includes(c.rattachement)
@@ -483,20 +327,26 @@ function saveConsultation(d) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName("OSTIE");
 
-  // Récupérer les données du collaborateur depuis "Grande"
+  // Récupérer les données du collaborateur depuis "Grande" (recherche ciblée)
   const grandeSheet = ss.getSheetByName("Grande");
   const grandeLastRow = grandeSheet.getLastRow();
-  const grandeData = grandeLastRow > 1
-    ? grandeSheet.getRange(2, 1, grandeLastRow - 1, 4).getValues()
-    : [];
   let fonction = "";
   let rattachement = "";
 
-  for (let i = 0; i < grandeData.length; i++) {
-    if (grandeData[i][0] == d.matricule) {
-      fonction = grandeData[i][2];
-      rattachement = grandeData[i][3];
-      break;
+  // Optimisation: éviter de charger toute la feuille Grande à chaque enregistrement
+  const matricule = String(d.matricule || "").trim();
+  if (grandeLastRow > 1 && matricule !== "") {
+    const searchRange = grandeSheet.getRange(2, 1, grandeLastRow - 1, 1); // Colonne A uniquement
+    const foundCell = searchRange
+      .createTextFinder(matricule)
+      .matchEntireCell(true)
+      .findNext();
+
+    if (foundCell) {
+      const rowIndex = foundCell.getRow();
+      const details = grandeSheet.getRange(rowIndex, 3, 1, 2).getValues()[0]; // C,D
+      fonction = details[0] || "";
+      rattachement = details[1] || "";
     }
   }
 
@@ -504,24 +354,49 @@ function saveConsultation(d) {
   const heureRetourVal = d.retourImmediatelyChecked ? (d.heureRetour || "") : "";
   const resultatVal = d.retourImmediatelyChecked ? "Visite d'embauche" : "";
 
-  sheet.appendRow([
-    d.matricule,                // Colonne A
-    d.nom,                      // Colonne B
-    fonction,                   // Colonne C
-    rattachement,               // Colonne D
-    d.typeConsultation,         // Colonne E
-    d.lieuConsultation,         // Colonne F
-    d.shift,                    // Colonne G
-    d.choix,                    // Colonne H
-    d.dateSortie,               // Colonne I
-    d.heureSortie,              // Colonne J
-    heureRetourVal,             // Colonne K
-    resultatVal,                // Colonne L
-    "",                         // Colonne M - Jours RM
-    "",                         // Colonne N - Anomalie
-    d.casGrave || "non",        // Colonne O - Cas grave
-    d.commentaires              // Colonne P - Commentaires
-  ]);
+  try {
+    const writeRow = sheet.getLastRow() + 1;
+    const rowValues = [
+      d.matricule,
+      d.nom,
+      fonction,
+      rattachement,
+      d.typeConsultation,
+      d.lieuConsultation,
+      d.shift,
+      d.choix,
+      d.dateSortie,
+      d.heureSortie,
+      heureRetourVal,
+      resultatVal,
+      "",
+      "",
+      d.casGrave || "non",
+      d.commentaires
+    ];
+    sheet.getRange(writeRow, 1, 1, rowValues.length).setValues([rowValues]);
+  } catch (e) {
+    // En cas d'erreur, fallback sur appendRow
+    console.warn('setValues failed, fallback to appendRow: ' + e);
+    sheet.appendRow([
+      d.matricule,
+      d.nom,
+      fonction,
+      rattachement,
+      d.typeConsultation,
+      d.lieuConsultation,
+      d.shift,
+      d.choix,
+      d.dateSortie,
+      d.heureSortie,
+      heureRetourVal,
+      resultatVal,
+      "",
+      "",
+      d.casGrave || "non",
+      d.commentaires
+    ]);
+  }
 }
 
 // ================= SET RETOUR =================
@@ -587,6 +462,15 @@ function setRetour(d) {
   } else {
     sheet.getRange(rowNumber, heureEntreeOstieCol).setValue(d.heureEntreeOstie || "");
     sheet.getRange(rowNumber, heureSortieOstieCol).setValue(d.heureSortieOstie || "");
+  }
+
+  // Marquer la ligne comme validée après écriture réussie pour éviter les doublons d'affichage
+  if (sheet.getLastColumn() >= 16) {
+    try {
+      sheet.getRange(rowNumber, 16).setValue(d.casGrave || "non");
+    } catch (e) {
+      console.warn("Impossible de mettre à jour le cas grave: " + e);
+    }
   }
 
   console.log(`✅ Retour enregistré pour ${d.matricule}`);
@@ -864,6 +748,7 @@ function checkAndCloseAnomalies() {
   let debugInfo = [];
   
   // ========== ÉTAPE 3: Parcourir toutes les consultations ==========
+  const pendingUpdates = [];
   for (let i = 1; i < data.length; i++) {
     const heureRetour = data[i][10];      // Colonne K - Heure de retour
     const resultat = data[i][11];         // Colonne L - Résultat
@@ -914,20 +799,23 @@ function checkAndCloseAnomalies() {
       
       // Processing line
       
-      // ========== ÉTAPE 7: Mettre à jour le spreadsheet ==========
-      sheet.getRange(i + 1, 11).setValue(heureRetourEstimee);  // Colonne K - Heure de retour
-      sheet.getRange(i + 1, 12).setValue("Consultation médical");          // Colonne L - Résultat
-      sheet.getRange(i + 1, 14).setValue("anomalie");          // Colonne N - Anomalie
-      
-      anomaliesCount++;
-      anomaliesDetail.push({
-        nom: nom,
-        sortie: heureSortieFormatee,
-        retourEstime: heureRetourEstimee
+      // Collecter les mises à jour pour limiter les appels au service
+      // On mettra à jour les colonnes K,L,M,N (11..14) en une seule opération par ligne
+      pendingUpdates.push({
+        row: i + 1,
+        values: [heureRetourEstimee, "Consultation médical", "", "anomalie"]
       });
+
+      anomaliesCount++;
+      anomaliesDetail.push({ nom: nom, sortie: heureSortieFormatee, retourEstime: heureRetourEstimee });
     }
   }
-  
+  // Appliquer les mises à jour collectées en minimisant les appels
+  for (let u = 0; u < pendingUpdates.length; u++) {
+    const upd = pendingUpdates[u];
+    sheet.getRange(upd.row, 11, 1, upd.values.length).setValues([upd.values]);
+  }
+
   // Anomalies processing complete
 }
 

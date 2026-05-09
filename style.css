@@ -582,6 +582,107 @@ body {
   white-space: nowrap;
 }
 
+/* Statut badge (utilisé dans les tableaux) */
+.statut-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 12px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.statut-en-attente { background: linear-gradient(90deg,#f39c12,#f1c40f); box-shadow: 0 6px 18px rgba(243,156,18,0.25); }
+.statut-deja { background: linear-gradient(90deg,#27ae60,#2ecc71); box-shadow: 0 6px 18px rgba(46,204,113,0.18); }
+
+/* Report & Synthese styling: make titles, headers and values "shine" */
+.matrix-container .matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  background: white;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.matrix-table thead th {
+  background: linear-gradient(90deg,#667eea,#764ba2);
+  color: white;
+  padding: 12px 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 800;
+  font-size: 13px;
+}
+.matrix-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f0f0f5;
+  color: #333;
+  font-weight: 600;
+}
+.matrix-table tbody tr:hover td {
+  background: linear-gradient(90deg, rgba(102,126,234,0.03), rgba(118,75,162,0.02));
+  transform: translateY(-1px);
+}
+.matrix-section h4 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #333;
+  background: linear-gradient(90deg,#667eea,#764ba2);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 8px;
+}
+.report-table thead th {
+  background: linear-gradient(90deg,#764ba2,#667eea);
+  color: white;
+  padding: 10px 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.report-table tbody td {
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+.report-table tbody tr:hover td {
+  background: rgba(102,126,234,0.03);
+}
+
+/* Add glow to section titles */
+.container h2, .matrix-section h4, .pending-section h3 {
+  text-shadow: 0 6px 18px rgba(102,126,234,0.12);
+}
+
+/* Emphasize key numeric values in synthese */
+.matrix-table td.col-total-consult, .matrix-table td.col-consult-simple {
+  font-size: 16px;
+  color: #111;
+  background: linear-gradient(90deg, rgba(118,75,162,0.03), rgba(102,126,234,0.02));
+}
+
+/* Make statut badges slightly larger in today's table */
+.today-consultations-section .statut-badge { font-size: 13px; padding: 6px 10px; }
+
+.today-consultations-section .today-status-cell,
+.today-consultations-section .today-rm-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.today-consultations-section .today-status-cell {
+  min-width: 120px;
+}
+
+.today-consultations-section .today-rm-cell {
+  min-width: 90px;
+}
+
+/* Table responsiveness: allow horizontal scroll on small screens */
+.table-container { overflow-x: auto; }
+.report-table th, .report-table td { white-space: nowrap; font-size: 13px; }
+
 /* ============== DETAILS BOX ============== */
 .details-box {
   background: linear-gradient(135deg, #f8f9fa 0%, #eef2f7 100%);
@@ -1177,9 +1278,11 @@ small.warning {
   font-size: 16px;
   font-weight: 600;
 }
-  margin-bottom: 15px;
-  text-align: center;
-  font-size: 16px;
+
+/* Les graphiques du suivi de retour sont masqués */
+#dashboard .charts-grid,
+#dashboard .chart-container {
+  display: none !important;
 }
 
 /* ============== PENDING LIST ============== */
@@ -1195,7 +1298,7 @@ small.warning {
 }
 
 .pending-section * {
-  margin-collapse: collapse;
+  box-sizing: border-box;
 }
 
 .pending-section h3 {
@@ -1789,7 +1892,6 @@ small.warning {
     max-width: 150px;
   }
 }
-}
 
 /* ============== MATRIX SECTIONS ============== */
 .matrix-section {
@@ -2179,11 +2281,6 @@ small.warning {
   padding: 0 !important;
   margin: 0 !important;
   border: none !important;
-}
-
-.pending-section tbody tr:first-child:has(input) {
-  /* Avant: display: none !important; */
-  /* Supprimé: cette règle cachait aussi nos vraies données avec inputs */
 }
 
 /* Masque UNIQUEMENT la ligne de filtre dans le thead */

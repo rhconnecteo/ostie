@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Utiliser la configuration du fichier config.js
   const API_URL = (typeof CONFIG !== 'undefined' && CONFIG.API_URL) 
     ? CONFIG.API_URL 
-    :"https://script.google.com/macros/s/AKfycbys4FVCM3ATp5wHsQ8vMsG9SU2A5jLcralJUVXotQxYnijb9daB9iF_-hHTfhxQs727aQ/exec";
+    :"https://script.google.com/macros/s/AKfycbwlVN35wjRAbV1vN_aJVZjjPsb4o9t31YE_d5QcYWRWQjy_an_PyoxgwM0r0SzAZ7JYTg/exec";
   
   const API_TIMEOUT = (typeof CONFIG !== 'undefined' && CONFIG.API_TIMEOUT) 
     ? CONFIG.API_TIMEOUT 
@@ -19,10 +19,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
   // ================= STATE =================
-  let isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
-  let userPassword = localStorage.getItem("userPassword") || "";
-  let userType = localStorage.getItem("userType") || ""; // "OSTIE_ADMIN" ou "PRODUCTION_VIEWER"
-  let userPermissions = localStorage.getItem("userPermissions") || ""; // "all" ou "readonly"
+  // Simplified: single admin mode (no login/production modes)
+  let isLoggedIn = false;  // Start as logged out - show login page
+  let currentUsername = "";
+  let userType = "OSTIE_ADMIN"; // single mode
+  let userPermissions = "all";
   let authorizedRattachements = []; // Filtre par domaine
   let allCollaborateurs = [];
   let allConsultations = [];
@@ -38,6 +39,18 @@ document.addEventListener("DOMContentLoaded", function () {
   let dashboardRefreshInterval = null; // Pour l'auto-refresh du dashboard "Suivi de retours"
   let isAddingToWaiting = false; // Debounce pour éviter les doublons
   let selectingFromWaiting = false; // Debounce pour éviter les doublures de sélection
+  let pendingReturnSelection = {}; // État temporaire des checkboxes "Retour?" avant validation
+
+  // ================= LOCAL LOGIN CONFIG =================
+  // Login uniquement côté client (code.gs reste API seulement)
+  const ALLOWED_USERNAMES = ["zélie", "miary", "fenitra"];
+  const LOGIN_PASSWORD = "Ostie";
+
+  // Restaurer la session locale si disponible
+  isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+  currentUsername = localStorage.getItem("authUser") || "";
+  userType = localStorage.getItem("userType") || "OSTIE_ADMIN";
+  userPermissions = localStorage.getItem("userPermissions") || "all";
 
   // ================= SLOGANS & MOTTOS =================
   const slogans = [
@@ -313,6 +326,181 @@ document.addEventListener("DOMContentLoaded", function () {
     return dateStr;
   }
 
+  function getWeekBounds(dateStr) {
+    const referenceDate = dateStr ? new Date(dateStr) : new Date();
+    if (Number.isNaN(referenceDate.getTime())) {
+      return { start: null, end: null };
+    }
+
+    const start = new Date(referenceDate);
+    start.setDate(start.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(referenceDate);
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+  }
+
+  function formatDateForFile(dateStr) {
+    if (!dateStr) return getTodayMadagascar();
+    return String(dateStr).replace(/\//g, "-");
+  }
+
+  function toSentenceCaseLabel(label) {
+    if (label === null || label === undefined) return "";
+    const text = String(label).trim().toLowerCase();
+    if (!text) return text;
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  function downloadTextFile(content, fileName, mimeType = "text/csv;charset=utf-8;") {
+    const blob = new Blob(["\ufeff" + content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function refreshDashboardSoon(delayMs = 300) {
+    setTimeout(() => {
+      void loadDashboardData();
+    }, delayMs);
+  }
+
+  function applyOptimisticReturnUpdate(row, values) {
+    if (!row) return;
+
+    const checkbox = row.querySelector(".checkbox-retour");
+    const timeInput = row.querySelector(".time-retour");
+    const selectResultat = row.querySelector(".select-resultat");
+    const inputJours = row.querySelector(".input-nbjours");
+    const timeEntreeOstie = row.querySelector(".time-entree-ostie");
+    const timeSortieOstie = row.querySelector(".time-sortie-ostie");
+    const btnValidate = row.querySelector(".btn-validate-retour");
+
+    if (checkbox) checkbox.checked = true;
+    if (timeInput) {
+      timeInput.value = values.heureRetour || timeInput.value;
+      timeInput.disabled = false;
+    }
+    if (selectResultat) {
+      selectResultat.value = values.resultat || selectResultat.value;
+      selectResultat.disabled = false;
+    }
+    if (inputJours) {
+      inputJours.value = values.nbJourRM || inputJours.value;
+      inputJours.disabled = !values.nbJourRM && inputJours.disabled;
+      if (values.nbJourRM) inputJours.style.display = "inline-block";
+    }
+    if (timeEntreeOstie) {
+      timeEntreeOstie.value = values.heureEntreeOstie || timeEntreeOstie.value;
+      timeEntreeOstie.disabled = false;
+    }
+    if (timeSortieOstie) {
+      timeSortieOstie.value = values.heureSortieOstie || timeSortieOstie.value;
+      timeSortieOstie.disabled = false;
+    }
+    if (btnValidate) {
+      btnValidate.disabled = true;
+      btnValidate.textContent = "✓";
+    }
+  }
+
+  function collectReturnValues(row) {
+    const timeInput = row.querySelector(".time-retour");
+    const selectResultat = row.querySelector(".select-resultat");
+    const inputJours = row.querySelector(".input-nbjours");
+    const timeEntreeOstie = row.querySelector(".time-entree-ostie");
+    const timeSortieOstie = row.querySelector(".time-sortie-ostie");
+
+    return {
+      heureRetour: timeInput?.value || "",
+      resultat: selectResultat?.value || "",
+      nbJourRM: inputJours?.value || "",
+      heureEntreeOstie: timeEntreeOstie?.value || "",
+      heureSortieOstie: timeSortieOstie?.value || ""
+    };
+  }
+
+  function refreshDashboardSoon(delayMs = 300) {
+    setTimeout(() => {
+      void loadDashboardData();
+    }, delayMs);
+  }
+
+  function applyOptimisticReturnUpdate(row, values) {
+    if (!row) return;
+
+    const checkbox = row.querySelector(".checkbox-retour");
+    const timeInput = row.querySelector(".time-retour");
+    const selectResultat = row.querySelector(".select-resultat");
+    const inputJours = row.querySelector(".input-nbjours");
+    const timeEntreeOstie = row.querySelector(".time-entree-ostie");
+    const timeSortieOstie = row.querySelector(".time-sortie-ostie");
+    const btnValidate = row.querySelector(".btn-validate-retour");
+
+    if (checkbox) checkbox.checked = true;
+    if (timeInput) {
+      timeInput.value = values.heureRetour || timeInput.value;
+      timeInput.disabled = false;
+    }
+    if (selectResultat) {
+      selectResultat.value = values.resultat || selectResultat.value;
+      selectResultat.disabled = false;
+    }
+    if (inputJours) {
+      inputJours.value = values.nbJourRM || inputJours.value;
+      inputJours.disabled = !values.nbJourRM && inputJours.disabled;
+      if (values.nbJourRM) inputJours.style.display = "inline-block";
+    }
+    if (timeEntreeOstie) {
+      timeEntreeOstie.value = values.heureEntreeOstie || timeEntreeOstie.value;
+      timeEntreeOstie.disabled = false;
+    }
+    if (timeSortieOstie) {
+      timeSortieOstie.value = values.heureSortieOstie || timeSortieOstie.value;
+      timeSortieOstie.disabled = false;
+    }
+    if (btnValidate) {
+      btnValidate.disabled = true;
+      btnValidate.textContent = "✓";
+    }
+  }
+
+  function collectReturnValues(row) {
+    const timeInput = row.querySelector(".time-retour");
+    const selectResultat = row.querySelector(".select-resultat");
+    const inputJours = row.querySelector(".input-nbjours");
+    const timeEntreeOstie = row.querySelector(".time-entree-ostie");
+    const timeSortieOstie = row.querySelector(".time-sortie-ostie");
+
+    return {
+      heureRetour: timeInput?.value || "",
+      resultat: selectResultat?.value || "",
+      nbJourRM: inputJours?.value || "",
+      heureEntreeOstie: timeEntreeOstie?.value || "",
+      heureSortieOstie: timeSortieOstie?.value || ""
+    };
+  }
+
+  function countWeeklyConsultationsForMatricule(matricule, referenceDateStr) {
+    const { start, end } = getWeekBounds(referenceDateStr);
+    if (!start || !end) return 0;
+
+    return allConsultations.filter(c => {
+      if (String(c.matricule || "").trim() !== String(matricule || "").trim()) return false;
+      const correctedDate = extractAndCorrectDate(c.date);
+      if (!correctedDate || correctedDate === "-") return false;
+      const consultDate = new Date(correctedDate);
+      return consultDate >= start && consultDate <= end;
+    }).length;
+  }
+
   const RESULTAT_RETOUR_OPTIONS = [
     { value: "Consultation médical", label: "Consultation médicale" },
     { value: "Repos médical", label: "Repos médical" },
@@ -342,6 +530,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (type === "success") {
       successMessage.style.background = "#d4edda";
       successMessage.style.color = "#155724";
+    } else if (type === "warning") {
+      successMessage.style.background = "#fff3cd";
+      successMessage.style.color = "#856404";
     } else {
       successMessage.style.background = "#f8d7da";
       successMessage.style.color = "#721c24";
@@ -375,75 +566,49 @@ document.addEventListener("DOMContentLoaded", function () {
     loginError.textContent = "⏳ Connexion en cours...";
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-      }, API_TIMEOUT);
+      const normalizedUsername = username.toLowerCase();
+      const isAllowedUser = ALLOWED_USERNAMES.includes(normalizedUsername);
+      const isValidPassword = password === LOGIN_PASSWORD;
 
-      try {
-        // Sending login request
-        const response = await fetch(
-          `${API_URL}?action=validateLogin&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-          { signal: controller.signal }
-        );
-        
-        clearTimeout(timeoutId);
-        // Received response
-
-        if (!response.ok) {
-          throw new Error(`Erreur serveur: ${response.status} ${response.statusText}`);
-        }
-
-        const result = await response.json();
-        // Login result processed
-
-        if (result.success) {
-          // Login successful
-          isLoggedIn = true;
-          userPassword = password;
-          userType = result.type; // "OSTIE_ADMIN" ou "PRODUCTION_VIEWER"
-          userPermissions = result.permissions; // "all" ou "readonly"
-          localStorage.setItem("isLoggedIn", "true");
-          localStorage.setItem("userPassword", password);
-          localStorage.setItem("userType", userType);
-          localStorage.setItem("userPermissions", userPermissions);
-          loginError.textContent = "";
-          
-          // Switching to app
-          loginPage.classList.remove("active");
-          appPage.classList.add("active");
-          
-          // NE PAS effacer les champs tout de suite - attendre le chargement complet
-          // usernameInput.value = "";
-          // passwordInput.value = "";
-          
-          showMessage("✅ Connecté avec succès!");
-          
-          // Adapter l'interface selon le type d'utilisateur
-          // UI setup
-          setupUIForUserType(userType, userPermissions);
-          
-          // Loading data - charger séquentiellement pour éviter les race conditions
-          await loadCollaborateurs();
-          await loadWaitingList();
-          await loadDashboardData(); // Charger le dashboard pour les deux types d'utilisateurs
-          
-          // MAINTENANT effacer les champs
-          usernameInput.value = "";
-          passwordInput.value = "";
-          
-          // Recharger la liste d'attente automatiquement toutes les 30 secondes
-          startAutoRefreshWaitingList();
-          
-          // Démarrer le refresh automatique du dashboard "Suivi de retours"
-          startAutoDashboardRefresh();
-        } else {
-          console.warn("Login échoué - identifiants incorrects");
-          loginError.textContent = "❌ " + (result.message || "Identifiants incorrects");
-        }
-      } finally {
-        clearTimeout(timeoutId);
+      if (!isAllowedUser || !isValidPassword) {
+        loginError.textContent = "❌ Identifiants incorrects";
+        return;
       }
+
+      isLoggedIn = true;
+      currentUsername = username;
+      userType = "OSTIE_ADMIN";
+      userPermissions = "all";
+
+      localStorage.setItem("isLoggedIn", "true");
+      localStorage.setItem("authUser", username);
+      localStorage.setItem("userType", userType);
+      localStorage.setItem("userPermissions", userPermissions);
+      loginError.textContent = "";
+
+      // Switching to app
+      loginPage.classList.remove("active");
+      appPage.classList.add("active");
+
+      showMessage("✅ Connecté avec succès!");
+
+      // Adapter l'interface selon le type d'utilisateur
+      setupUIForUserType(userType, userPermissions);
+
+      // Loading data - charger séquentiellement pour éviter les race conditions
+      await loadCollaborateurs();
+      await loadWaitingList();
+      await loadDashboardData();
+
+      // MAINTENANT effacer les champs
+      usernameInput.value = "";
+      passwordInput.value = "";
+
+      // Recharger la liste d'attente automatiquement toutes les 30 secondes
+      startAutoRefreshWaitingList();
+
+      // Démarrer le refresh automatique du dashboard "Suivi de retours"
+      startAutoDashboardRefresh();
     } catch (err) {
       console.error("Erreur login:", err);
       let errorMsg = "❌ Erreur lors de la connexion";
@@ -468,14 +633,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
   logoutBtn.addEventListener("click", function () {
     isLoggedIn = false;
-    userPassword = "";
+    currentUsername = "";
     userType = "";
     userPermissions = "";
     waitingPersonnes = []; // Effacer la liste d'attente locale
     stopAutoRefreshWaitingList(); // Arrêter l'auto-refresh
     stopAutoDashboardRefresh(); // Arrêter l'auto-refresh du dashboard
     localStorage.setItem("isLoggedIn", "false");
-    localStorage.setItem("userPassword", "");
+    localStorage.setItem("authUser", "");
     localStorage.setItem("userType", "");
     localStorage.setItem("userPermissions", "");
     loginPage.classList.add("active");
@@ -830,7 +995,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ================= AUTO-LOGIN ON PAGE LOAD =================
   // Accepté - restoration automatique de la session
-  if (isLoggedIn && userPassword && userType && userPermissions) {
+  if (isLoggedIn && currentUsername && userType && userPermissions) {
     setTimeout(() => {
       loginPage.classList.remove("active");
       appPage.classList.add("active");
@@ -1005,9 +1170,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const heureAjout = String(now.getHours()).padStart(2, "0") + ":" + 
                           String(now.getMinutes()).padStart(2, "0");
 
-        // Construire l'URL avec le password pour vérification
-        const pwd = userPassword || localStorage.getItem("userPassword") || "";
-        const url = `${API_URL}?action=addToWaiting&password=${encodeURIComponent(pwd)}&matricule=${encodeURIComponent(c.matricule)}&nom=${encodeURIComponent(c.nom)}&fonction=${encodeURIComponent(c.fonction || "")}&rattachement=${encodeURIComponent(c.rattachement || "")}`;
+        const url = `${API_URL}?action=addToWaiting&matricule=${encodeURIComponent(c.matricule)}&nom=${encodeURIComponent(c.nom)}&fonction=${encodeURIComponent(c.fonction || "")}&rattachement=${encodeURIComponent(c.rattachement || "")}`;
 
         // Ajouter à la base de données via l'API
         const response = await fetch(url);
@@ -1201,9 +1364,9 @@ document.addEventListener("DOMContentLoaded", function () {
           
           showMessage("✅ Personne supprimée de l'attente");
           
-          // Supprimer avec le password pour vérification (en arrière-plan)
+          // Supprimer en arrière-plan
           try {
-            const response = await fetch(`${API_URL}?action=removeFromWaiting&matricule=${encodeURIComponent(matricule)}&password=${encodeURIComponent(userPassword)}`);
+            const response = await fetch(`${API_URL}?action=removeFromWaiting&matricule=${encodeURIComponent(matricule)}`);
             const result = await response.json();
             
             if (result.success) {
@@ -1473,9 +1636,13 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
+    const weeklyConsultationsCount = countWeeklyConsultationsForMatricule(c.matricule, convertDateToISO(dateInput.value));
+    if (weeklyConsultationsCount >= 2) {
+      showMessage(`⚠️ Alerte: ${c.nom} a déjà ${weeklyConsultationsCount} consultation(s) dans les 7 derniers jours.`, "warning");
+    }
+
     const params = new URLSearchParams({
       action: "saveConsultation",
-      password: userPassword || localStorage.getItem("userPassword") || "",
       matricule: c.matricule,
       nom: c.nom,
       prenom: c.prenom || "",
@@ -1506,9 +1673,7 @@ document.addEventListener("DOMContentLoaded", function () {
         // ✅ Retirer de la liste d'attente APRÈS enregistrement
         const matricule = c.matricule;
         if (matricule) {
-          const pwd = userPassword || localStorage.getItem("userPassword") || "";
-          
-          fetch(`${API_URL}?action=removeFromWaiting&password=${encodeURIComponent(pwd)}&matricule=${encodeURIComponent(matricule)}`)
+          fetch(`${API_URL}?action=removeFromWaiting&matricule=${encodeURIComponent(matricule)}`)
             .then(r => r.json())
             .then(result => {
               if (result.success) {
@@ -1597,20 +1762,20 @@ document.addEventListener("DOMContentLoaded", function () {
   // ================= DASHBOARD =================
   async function loadDashboardData() {
     try {
-      // Vérifier que userPassword est défini (le récupérer du localStorage si nécessaire)
-      const pwd = userPassword || localStorage.getItem("userPassword") || "";
-      if (!pwd) {
-        console.error("Erreur: userPassword non trouvé!");
-        showMessage("❌ Erreur: session invalide. Veuillez vous reconnecter.", "error");
-        return;
-      }
-      
-      const res = await fetch(`${API_URL}?action=getConsultations&password=${encodeURIComponent(pwd)}`);
+      const res = await fetch(`${API_URL}?action=getConsultations`);
       const json = await res.json();
 
       if (!json.success) throw new Error(json.error);
 
       allConsultations = json.data || [];
+
+      const chartsGrid = document.querySelector('.charts-grid');
+      if (chartsGrid) {
+        chartsGrid.style.display = 'none';
+      }
+      document.querySelectorAll('.chart-container').forEach(container => {
+        container.style.display = 'none';
+      });
       
       // Vérifier les données reçues (DEBUG)
       console.log("📊 Premières consultations reçues:", allConsultations.slice(0, 2).map(c => ({
@@ -1891,7 +2056,8 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function updateCharts() {
-    // ========== UTILISER LES CONSULTATIONS D'AUJOURD'HUI SEULEMENT ==========
+    // Charts disabled - not needed
+    return;
     const todayConsultations = getTodayConsultations();
     const filteredToday = filterByDomain(todayConsultations);
     
@@ -2004,27 +2170,33 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!todayConsultationsBody) return;
     
     if (filteredConsultations.length === 0) {
-      todayConsultationsBody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 20px; color: #999;">Aucune consultation d\'aujourd\'hui</td></tr>';
+      todayConsultationsBody.innerHTML = '<tr><td colspan="15" style="text-align: center; padding: 20px; color: #999;">Aucune consultation d\'aujourd\'hui</td></tr>';
       return;
     }
     
     todayConsultationsBody.innerHTML = filteredConsultations.map(c => {
       const heureRetour = c.heure_retour || c.heureRetour || "";
       const hasRetour = heureRetour && heureRetour.trim() !== "";
-      const statut = hasRetour ? "✅ Complète" : "⏳ En attente";
-      const statutClass = hasRetour ? "complete" : "pending";
-      
+      const statut = hasRetour ? "Déjà retourné" : "En attente";
+      const statutClass = hasRetour ? "statut-deja" : "statut-en-attente";
+
       return `
         <tr>
-          <td><strong>${c.nom || ''}</strong></td>
           <td>${c.matricule || ''}</td>
+          <td>${c.nom || ''}${c.prenom ? ' ' + c.prenom : ''}</td>
+          <td>${c.fonction || ''}</td>
+          <td><span class="statut-badge ${statutClass}">${statut}</span></td>
           <td>${c.type_consultation || c.typeConsultation || ''}</td>
           <td>${c.lieu_consultation || c.lieuConsultation || ''}</td>
           <td>${c.shift || ''}</td>
+          <td>${c.choix || ''}</td>
+          <td>${extractAndCorrectDate(c.date) || ''}</td>
           <td>${extractTimeFromISO(c.heure_sortie || c.heureSortie)}</td>
           <td>${hasRetour ? extractTimeFromISO(heureRetour) : '--'}</td>
           <td>${c.resultat || '--'}</td>
-          <td><span class="statut-badge ${statutClass}">${statut}</span></td>
+          <td>${c.nbJourRM || c.nb_jour_rm || '--'}</td>
+          <td>${c.heureEntreeOstie || c.heure_entree_ostie || '--'}</td>
+          <td>${c.heureSortieOstie || c.heure_sortie_ostie || '--'}</td>
         </tr>
       `;
     }).join("");
@@ -2432,7 +2604,7 @@ document.addEventListener("DOMContentLoaded", function () {
               <td>${c.choix || "-"}</td>
               <td>${extractAndCorrectDate(c.date) || "-"}</td>
               <td>${extractTimeFromISO(heureSortie) || ""}</td>
-              <td><input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}" data-row-id="${rowId}" data-sheet-row="${sheetRow}" ${c.heureRetour ? 'checked' : ''}></td>
+              <td><input type="checkbox" class="checkbox-retour" data-matricule="${c.matricule}" data-row-id="${rowId}" data-sheet-row="${sheetRow}" ${c.heureRetour || pendingReturnSelection[sheetRow || rowId] ? 'checked' : ''}></td>
               <td><input type="time" class="time-retour" data-matricule="${c.matricule}" data-sheet-row="${sheetRow}" value="${c.heureRetour ? extractTimeFromISO(c.heureRetour) : ''}" ${c.heureRetour ? '' : 'disabled'}></td>
               <td>
                 <select class="select-resultat" data-matricule="${c.matricule}" data-sheet-row="${sheetRow}" ${c.heureRetour ? '' : 'disabled'} style="width:100%; padding:3px 4px; font-size:10px;">
@@ -2692,6 +2864,8 @@ document.addEventListener("DOMContentLoaded", function () {
       checkbox.addEventListener("change", function () {
         const matricule = this.dataset.matricule;
         const row = this.closest("tr");
+        const rowKey = row?.dataset.sheetRow || this.dataset.sheetRow || this.dataset.rowId || matricule;
+        pendingReturnSelection[rowKey] = this.checked;
         const timeInput = row.querySelector(".time-retour");
         const selectResultat = row.querySelector(".select-resultat");
         const timeEntreeOstie = row.querySelector(".time-entree-ostie");
@@ -2753,6 +2927,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const selectResultat = row.querySelector(".select-resultat");
         const inputJours = row.querySelector(".input-nbjours");
         const selectedResult = selectResultat.value;
+        const returnValues = collectReturnValues(row);
         
         // Vérifier que le résultat est sélectionné
         if (!selectedResult || selectedResult === "") {
@@ -2774,7 +2949,6 @@ document.addEventListener("DOMContentLoaded", function () {
         // Enregistrer les données
         const params = new URLSearchParams({
           action: "setRetour",
-          password: userPassword,
           matricule: matricule,
           rowNumber: sheetRow,
           heureRetour: timeInput.value,
@@ -2787,6 +2961,7 @@ document.addEventListener("DOMContentLoaded", function () {
         try {
           this.disabled = true;
           this.textContent = "⏳ Enregistrement...";
+          applyOptimisticReturnUpdate(row, returnValues);
 
           fetch(`${API_URL}?${params}`)
             .then(async res => {
@@ -2794,9 +2969,10 @@ document.addEventListener("DOMContentLoaded", function () {
               if (!json.success) {
                 throw new Error(json.error || "Erreur inconnue");
               }
+              delete pendingReturnSelection[sheetRow || matricule];
               // ✅ Actualisation des données après sauvegarde réussie
               showMessage("✅ Retour enregistré, actualisation en cours...");
-              void loadDashboardData();
+              refreshDashboardSoon(150);
             })
             .catch(error => {
               console.error("Erreur enregistrement retour:", error);
@@ -2804,12 +2980,14 @@ document.addEventListener("DOMContentLoaded", function () {
               // Reset button on error so user knows something went wrong
               this.disabled = false;
               this.textContent = "✓ Valider";
+              refreshDashboardSoon(300);
             });
         } catch (e) {
           console.error("Erreur:", e);
           showMessage("❌ Erreur serveur", "error");
           this.disabled = false;
           this.textContent = "✓ Valider";
+          refreshDashboardSoon(300);
         }
       });
     });
@@ -2828,6 +3006,8 @@ document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".checkbox-retour").forEach(checkbox => {
       checkbox.addEventListener("change", function () {
         const matricule = this.dataset.matricule;
+        const rowKey = this.dataset.sheetRow || this.dataset.rowId || matricule;
+        pendingReturnSelection[rowKey] = this.checked;
         const timeInput = this.parentElement.querySelector(".time-retour");
         const selectResultat = this.parentElement.querySelector(".select-resultat");
         const inputJours = this.parentElement.querySelector(".input-nbjours");
@@ -2908,6 +3088,8 @@ document.addEventListener("DOMContentLoaded", function () {
         const selectResultat = this.parentElement.querySelector(".select-resultat");
         const inputJours = this.parentElement.querySelector(".input-nbjours");
         const checkbox = this.parentElement.querySelector(".checkbox-retour");
+        const row = this.closest("tr");
+        const returnValues = collectReturnValues(row);
 
         if (!checkbox.checked || !timeInput.value || !selectResultat.value) {
           showMessage("❌ Remplissez tous les champs", "error");
@@ -2921,7 +3103,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const params = new URLSearchParams({
           action: "setRetour",
-          password: userPassword,
           matricule: matricule,
           rowNumber: sheetRow,
           heureRetour: timeInput.value,
@@ -2932,6 +3113,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         this.disabled = true;
         this.textContent = "⏳ Enregistrement...";
+        applyOptimisticReturnUpdate(row, returnValues);
 
         fetch(`${API_URL}?${params}`)
           .then(async res => {
@@ -2941,7 +3123,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
             // ✅ Actualisation des données après sauvegarde réussie
             showMessage("✅ Retour enregistré, actualisation en cours...");
-            void loadDashboardData();
+            refreshDashboardSoon(150);
           })
           .catch(error => {
             console.error(error);
@@ -2949,6 +3131,7 @@ document.addEventListener("DOMContentLoaded", function () {
             // Reset button on error so user knows something went wrong
             this.disabled = false;
             this.textContent = "✓ Valider";
+            refreshDashboardSoon(300);
           });
       });
     });
@@ -2967,7 +3150,6 @@ document.addEventListener("DOMContentLoaded", function () {
         // Enregistrer les temps Ostie directement
         const params = new URLSearchParams({
           action: "setTempsOstie",
-          password: userPassword,
           matricule: matricule,
           rowNumber: sheetRow,
           heureEntreeOstie: timeEntreeOstie?.value || "",
@@ -2980,13 +3162,15 @@ document.addEventListener("DOMContentLoaded", function () {
             if (!json.success) {
               throw new Error(json.message || json.error || "Erreur inconnue");
             }
+            delete pendingReturnSelection[sheetRow || matricule];
             console.log(`✅ Temps Ostie enregistrés pour ${matricule}`);
             showMessage(`✅ Temps Ostie envoyés pour ${matricule}, actualisation en cours...`);
-            void loadDashboardData();
+            refreshDashboardSoon(150);
           })
           .catch(error => {
             console.error("❌ Erreur lors de l'enregistrement des temps Ostie:", error);
             showMessage(`❌ Erreur: ${error.message}`, "error");
+            refreshDashboardSoon(300);
           });
       });
     });
@@ -3243,7 +3427,6 @@ document.addEventListener("DOMContentLoaded", function () {
     updateCollaboratorsTable(consultations);
     updateReportStatistics(consultations);
     updateReportCharts(consultations);
-    loadConsultationRates();
   }
 
   // ================= ATTACH TABLE FILTERS =================
@@ -3392,45 +3575,107 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     let html = '<table class="matrix-table"><thead><tr>';
-    html += '<th>Catégorie</th>';
-    html += '<th class="col-consultation">Consultation</th>';
-    html += '<th class="col-repos">Repos Médical</th>';
-    html += '<th class="col-assistante">Assistante Maternelle</th>';
-    html += '<th class="col-total">Total</th>';
+    html += `<th>${toSentenceCaseLabel("Catégorie")}</th>`;
+    html += `<th class="col-total-consult">${toSentenceCaseLabel("Total consultations")}</th>`;
+    html += `<th class="col-consult-simple">${toSentenceCaseLabel("Consultation simple")}</th>`;
+    html += `<th class="col-personnes-rm">${toSentenceCaseLabel("Total personnes RM")}</th>`;
+    html += `<th class="col-jours-rm">${toSentenceCaseLabel("Nombre de jours RM")}</th>`;
+    html += `<th class="col-personnes-assistante">${toSentenceCaseLabel("Total personnes assistante maternelle")}</th>`;
+    html += `<th class="col-jours-assistante">${toSentenceCaseLabel("Nombre de jours assistante maternelle")}</th>`;
+    html += `<th class="col-pending">${toSentenceCaseLabel("Total personnes non retournées")}</th>`;
     html += '</tr></thead><tbody>';
 
     keys.forEach(key => {
       const stats = statsObj[key];
-      const total = stats.consultation + stats.rm + stats.assistante;
+      const totalConsult = stats.total || 0;
+      const consultSimple = stats.consultationSimple || 0;
+      const personnesRM = stats.rmPersonnes || 0;
+      const joursRM = stats.rmJours || 0;
+      const personnesAssistante = stats.assistantePersonnes || 0;
+      const joursAssistante = stats.assistanteJours || 0;
+      const pending = stats.pending || 0;
       html += `<tr>`;
       html += `<td>${key || '(Non spécifié)'}</td>`;
-      html += `<td class="col-consultation">${stats.consultation}</td>`;
-      html += `<td class="col-repos">${stats.rm}</td>`;
-      html += `<td class="col-assistante">${stats.assistante}</td>`;
-      html += `<td class="col-total">${total}</td>`;
+      html += `<td class="col-total-consult">${totalConsult}</td>`;
+      html += `<td class="col-consult-simple">${consultSimple}</td>`;
+      html += `<td class="col-personnes-rm">${personnesRM}</td>`;
+      html += `<td class="col-jours-rm">${joursRM.toFixed(1)}</td>`;
+      html += `<td class="col-personnes-assistante">${personnesAssistante}</td>`;
+      html += `<td class="col-jours-assistante">${joursAssistante.toFixed(1)}</td>`;
+      html += `<td class="col-pending">${pending}</td>`;
       html += `</tr>`;
     });
 
     // Ligne de total
-    const totalConsultation = keys.reduce((sum, k) => sum + statsObj[k].consultation, 0);
-    const totalRM = keys.reduce((sum, k) => sum + statsObj[k].rm, 0);
-    const totalAssistante = keys.reduce((sum, k) => sum + statsObj[k].assistante, 0);
-    const grandTotal = totalConsultation + totalRM + totalAssistante;
+    const totalConsultation = keys.reduce((sum, k) => sum + (statsObj[k].total || 0), 0);
+    const totalConsultSimple = keys.reduce((sum, k) => sum + (statsObj[k].consultationSimple || 0), 0);
+    const totalRM = keys.reduce((sum, k) => sum + (statsObj[k].rmPersonnes || 0), 0);
+    const totalJoursRM = keys.reduce((sum, k) => sum + (statsObj[k].rmJours || 0), 0);
+    const totalAssistante = keys.reduce((sum, k) => sum + (statsObj[k].assistantePersonnes || 0), 0);
+    const totalJoursAssistante = keys.reduce((sum, k) => sum + (statsObj[k].assistanteJours || 0), 0);
+    const totalPending = keys.reduce((sum, k) => sum + (statsObj[k].pending || 0), 0);
 
     html += `<tr style="font-weight: bold; background-color: #f0f0f0;">`;
-    html += `<td>TOTAL</td>`;
-    html += `<td class="col-consultation">${totalConsultation}</td>`;
-    html += `<td class="col-repos">${totalRM}</td>`;
-    html += `<td class="col-assistante">${totalAssistante}</td>`;
-    html += `<td class="col-total">${grandTotal}</td>`;
+    html += `<td>${toSentenceCaseLabel("Total")}</td>`;
+    html += `<td class="col-total-consult">${totalConsultation}</td>`;
+    html += `<td class="col-consult-simple">${totalConsultSimple}</td>`;
+    html += `<td class="col-personnes-rm">${totalRM}</td>`;
+    html += `<td class="col-jours-rm">${totalJoursRM.toFixed(1)}</td>`;
+    html += `<td class="col-personnes-assistante">${totalAssistante}</td>`;
+    html += `<td class="col-jours-assistante">${totalJoursAssistante.toFixed(1)}</td>`;
+    html += `<td class="col-pending">${totalPending}</td>`;
     html += `</tr>`;
 
     html += '</tbody></table>';
     return html;
   }
 
+  function buildSyntheseStats(consultations, groupByKey) {
+    const stats = {};
+
+    consultations.forEach(c => {
+      const keyRaw = c[groupByKey];
+      const key = keyRaw && String(keyRaw).trim() !== "" ? keyRaw : "(Non spécifié)";
+      const heureRetour = c.heureRetour || c.heure_retour || "";
+      const isPending = !heureRetour || heureRetour.trim() === "";
+      const resultat = (c.resultat || "").trim();
+      const jours = parseFloat(c.nbJourRM) || 0;
+
+      if (!stats[key]) {
+        stats[key] = {
+          total: 0,
+          consultationSimple: 0,
+          rmPersonnes: 0,
+          rmJours: 0,
+          assistantePersonnes: 0,
+          assistanteJours: 0,
+          pending: 0
+        };
+      }
+
+      stats[key].total++;
+
+      if (resultat === "Consultation médical") {
+        stats[key].consultationSimple++;
+      } else if (resultat === "Repos médical") {
+        stats[key].rmPersonnes++;
+        stats[key].rmJours += jours;
+      } else if (resultat === "Assistante maternelle") {
+        stats[key].assistantePersonnes++;
+        stats[key].assistanteJours += jours;
+      }
+
+      if (isPending) {
+        stats[key].pending++;
+      }
+    });
+
+    return stats;
+  }
+
   function updateReportCharts(consultations) {
-    if (consultations.length === 0) return;
+    // Report charts disabled - not needed
+    return;
 
     // Chart Résultats - Consultation vs Repos Médical vs Assistante Maternelle
     const consultation = countByResult(consultations, "Consultation médical");
@@ -3714,15 +3959,25 @@ document.addEventListener("DOMContentLoaded", function () {
     // Matrice Rattachement - Consultation vs RM vs Assistante Maternelle
     const rattachementStats = {};
     consultations.forEach(c => {
+      // Check pending (no heureRetour) once per consultation
+      const heureRetour = c.heureRetour || c.heure_retour || "";
+      const isPending = !heureRetour || heureRetour.trim() === "";
+      
       if (!rattachementStats[c.rattachement]) {
-        rattachementStats[c.rattachement] = { consultation: 0, rm: 0, assistante: 0 };
+        rattachementStats[c.rattachement] = { consultation: 0, rm: 0, assistante: 0, joursRM: 0, pending: 0 };
       }
       if (c.resultat === "Consultation médical") {
         rattachementStats[c.rattachement].consultation++;
       } else if (c.resultat === "Repos médical") {
         rattachementStats[c.rattachement].rm++;
+        const jours = parseFloat(c.nbJourRM) || 0;
+        rattachementStats[c.rattachement].joursRM += jours;
       } else if (c.resultat === "Assistante maternelle") {
         rattachementStats[c.rattachement].assistante++;
+      }
+      // Count pending
+      if (isPending) {
+        rattachementStats[c.rattachement].pending++;
       }
     });
 
@@ -3735,15 +3990,25 @@ document.addEventListener("DOMContentLoaded", function () {
     // Matrice Fonction - Consultation vs RM vs Assistante Maternelle
     const fonctionStats = {};
     consultations.forEach(c => {
+      // Check pending (no heureRetour) once per consultation
+      const heureRetour = c.heureRetour || c.heure_retour || "";
+      const isPending = !heureRetour || heureRetour.trim() === "";
+      
       if (!fonctionStats[c.fonction]) {
-        fonctionStats[c.fonction] = { consultation: 0, rm: 0, assistante: 0 };
+        fonctionStats[c.fonction] = { consultation: 0, rm: 0, assistante: 0, joursRM: 0, pending: 0 };
       }
       if (c.resultat === "Consultation médical") {
         fonctionStats[c.fonction].consultation++;
       } else if (c.resultat === "Repos médical") {
         fonctionStats[c.fonction].rm++;
+        const jours = parseFloat(c.nbJourRM) || 0;
+        fonctionStats[c.fonction].joursRM += jours;
       } else if (c.resultat === "Assistante maternelle") {
         fonctionStats[c.fonction].assistante++;
+      }
+      // Count pending
+      if (isPending) {
+        fonctionStats[c.fonction].pending++;
       }
     });
 
@@ -3805,10 +4070,7 @@ document.addEventListener("DOMContentLoaded", function () {
       
       const container = document.getElementById("consultationRatesContainer");
       
-      if (!container) {
-        console.warn("⚠️ consultationRatesContainer n'existe pas!");
-        return;
-      }
+      if (!container) return;
 
       if (rates.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">Aucune donnée de taux disponible</p>';
@@ -4082,6 +4344,36 @@ document.addEventListener("DOMContentLoaded", function () {
   const btnResetCollab = document.getElementById("btnResetCollab");
   const btnFilterSynthese = document.getElementById("btnFilterSynthese");
   const btnResetSynthese = document.getElementById("btnResetSynthese");
+  const btnExportSyntheseExcel = document.getElementById("btnExportSyntheseExcel");
+
+  function getFilteredSyntheseConsultations() {
+    const fromDate = document.getElementById("filterSyntheseFromDate")?.value || "";
+    const toDate = document.getElementById("filterSyntheseToDate")?.value || "";
+    const rattachement = document.getElementById("filterSyntheseRattachement")?.value || "";
+    const fonction = document.getElementById("filterSyntheseFonction")?.value || "";
+
+    let filtered = allConsultations;
+    if (fromDate) {
+      filtered = filtered.filter(c => {
+        const cDate = extractAndCorrectDate(c.date);
+        return cDate >= fromDate;
+      });
+    }
+    if (toDate) {
+      filtered = filtered.filter(c => {
+        const cDate = extractAndCorrectDate(c.date);
+        return cDate <= toDate;
+      });
+    }
+    if (rattachement) {
+      filtered = filtered.filter(c => c.rattachement === rattachement);
+    }
+    if (fonction) {
+      filtered = filtered.filter(c => c.fonction === fonction);
+    }
+
+    return filtered;
+  }
 
   // Filtres TAU
   if (btnFilterTaux) {
@@ -4212,60 +4504,11 @@ document.addEventListener("DOMContentLoaded", function () {
   // Filtres SYNTHÈSES
   if (btnFilterSynthese) {
     btnFilterSynthese.addEventListener("click", function() {
-      const fromDate = document.getElementById("filterSyntheseFromDate")?.value || "";
-      const toDate = document.getElementById("filterSyntheseToDate")?.value || "";
-      const rattachement = document.getElementById("filterSyntheseRattachement")?.value || "";
-      const fonction = document.getElementById("filterSyntheseFonction")?.value || "";
+      const filtered = getFilteredSyntheseConsultations();
       
-      let filtered = allConsultations;
-      if (fromDate) {
-        filtered = filtered.filter(c => {
-          const cDate = extractAndCorrectDate(c.date);
-          return cDate >= fromDate;
-        });
-      }
-      if (toDate) {
-        filtered = filtered.filter(c => {
-          const cDate = extractAndCorrectDate(c.date);
-          return cDate <= toDate;
-        });
-      }
-      if (rattachement) {
-        filtered = filtered.filter(c => c.rattachement === rattachement);
-      }
-      if (fonction) {
-        filtered = filtered.filter(c => c.fonction === fonction);
-      }
-      
-      // Générer les matrices synthèses
-      const rattachementStats = {};
-      const fonctionStats = {};
-      
-      filtered.forEach(c => {
-        // Stats par rattachement
-        if (!rattachementStats[c.rattachement]) {
-          rattachementStats[c.rattachement] = { consultation: 0, rm: 0, assistante: 0 };
-        }
-        if (c.resultat === "Consultation médical") {
-          rattachementStats[c.rattachement].consultation++;
-        } else if (c.resultat === "Repos médical") {
-          rattachementStats[c.rattachement].rm++;
-        } else if (c.resultat === "Assistante maternelle") {
-          rattachementStats[c.rattachement].assistante++;
-        }
-        
-        // Stats par fonction
-        if (!fonctionStats[c.fonction]) {
-          fonctionStats[c.fonction] = { consultation: 0, rm: 0, assistante: 0 };
-        }
-        if (c.resultat === "Consultation médical") {
-          fonctionStats[c.fonction].consultation++;
-        } else if (c.resultat === "Repos médical") {
-          fonctionStats[c.fonction].rm++;
-        } else if (c.resultat === "Assistante maternelle") {
-          fonctionStats[c.fonction].assistante++;
-        }
-      });
+      // Générer les matrices synthèses demandées
+      const rattachementStats = buildSyntheseStats(filtered, "rattachement");
+      const fonctionStats = buildSyntheseStats(filtered, "fonction");
       
       const matrixRattachement = document.getElementById("matrixRattachement");
       const matrixFonction = document.getElementById("matrixFonction");
@@ -4283,40 +4526,50 @@ document.addEventListener("DOMContentLoaded", function () {
       document.getElementById("filterSyntheseFonction").value = "";
       
       // Générer les matrices synthèses avec toutes les données
-      const rattachementStats = {};
-      const fonctionStats = {};
-      
-      allConsultations.forEach(c => {
-        // Stats par rattachement
-        if (!rattachementStats[c.rattachement]) {
-          rattachementStats[c.rattachement] = { consultation: 0, rm: 0, assistante: 0 };
-        }
-        if (c.resultat === "Consultation médical") {
-          rattachementStats[c.rattachement].consultation++;
-        } else if (c.resultat === "Repos médical") {
-          rattachementStats[c.rattachement].rm++;
-        } else if (c.resultat === "Assistante maternelle") {
-          rattachementStats[c.rattachement].assistante++;
-        }
-        
-        // Stats par fonction
-        if (!fonctionStats[c.fonction]) {
-          fonctionStats[c.fonction] = { consultation: 0, rm: 0, assistante: 0 };
-        }
-        if (c.resultat === "Consultation médical") {
-          fonctionStats[c.fonction].consultation++;
-        } else if (c.resultat === "Repos médical") {
-          fonctionStats[c.fonction].rm++;
-        } else if (c.resultat === "Assistante maternelle") {
-          fonctionStats[c.fonction].assistante++;
-        }
-      });
+      const rattachementStats = buildSyntheseStats(allConsultations, "rattachement");
+      const fonctionStats = buildSyntheseStats(allConsultations, "fonction");
       
       const matrixRattachement = document.getElementById("matrixRattachement");
       const matrixFonction = document.getElementById("matrixFonction");
       
       if (matrixRattachement) matrixRattachement.innerHTML = generateMatrixTable(rattachementStats);
       if (matrixFonction) matrixFonction.innerHTML = generateMatrixTable(fonctionStats);
+    });
+  }
+
+  if (btnExportSyntheseExcel) {
+    btnExportSyntheseExcel.addEventListener("click", function () {
+      const filtered = getFilteredSyntheseConsultations();
+      const nonReturned = filtered.filter(c => {
+        const heureRetour = c.heureRetour || c.heure_retour || "";
+        return !heureRetour || heureRetour.trim() === "";
+      });
+
+      if (nonReturned.length === 0) {
+        showMessage("⚠️ Aucune personne non retournée pour l'export.", "warning");
+        return;
+      }
+
+      const fromDate = document.getElementById("filterSyntheseFromDate")?.value || "";
+      const toDate = document.getElementById("filterSyntheseToDate")?.value || "";
+      const datePart = fromDate && toDate ? `${fromDate}_au_${toDate}` : (fromDate || toDate || getTodayMadagascar());
+      const fileName = `Personnesnonretour_${formatDateForFile(datePart)}.csv`;
+
+      const csvRows = [
+        ["Matricule", "Nom et Prenom", "Fonction"],
+        ...nonReturned.map(c => [
+          c.matricule || "",
+          `${c.nom || ""} ${c.prenom || ""}`.trim(),
+          c.fonction || ""
+        ])
+      ];
+
+      const csvContent = csvRows
+        .map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(";") )
+        .join("\n");
+
+      downloadTextFile(csvContent, fileName);
+      showMessage(`✅ Export généré: ${fileName}`);
     });
   }
 
@@ -4335,9 +4588,7 @@ document.addEventListener("DOMContentLoaded", function () {
         btn.textContent = "Vérification...";
       }
 
-      // Récupérer le mot de passe et l'envoyer en paramètre
-      const pwd = userPassword || localStorage.getItem("userPassword") || "";
-      const res = await fetch(`${API_URL}?action=checkAnomalies&password=${encodeURIComponent(pwd)}`);
+      const res = await fetch(`${API_URL}?action=checkAnomalies`);
       const json = await res.json();
 
       if (json.success) {
