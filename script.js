@@ -1810,6 +1810,8 @@ document.addEventListener("DOMContentLoaded", function () {
       updateDashboardInfo(); // Mettre à jour l'indicateur de période
       populateFilterSelects(); // Remplir les sélects des filtres
       displayReport(filteredData); // Afficher le rapport initial (filtré)
+      // Mettre à jour TOP 10 dans la synthèse si la section est visible
+      try { generateTop10(filteredData); } catch (e) { /* ignore */ }
 
     } catch (e) {
       // Ignorer les AbortErrors (requête annulée lors de la navigation)
@@ -3673,6 +3675,110 @@ document.addEventListener("DOMContentLoaded", function () {
     return stats;
   }
 
+  // Générer et afficher les TOP 10 pour la synthèse
+  function generateTop10(consultations) {
+    if (!Array.isArray(consultations)) consultations = [];
+
+    const escapeHtml = (value) => String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+    // Agréger par personne (matricule + nom)
+    const personMap = {};
+    consultations.forEach(c => {
+      const matricule = (c.matricule || "").trim();
+      const nom = ((c.nom || "") + (c.prenom ? ' ' + c.prenom : '')).trim();
+      const fonction = (c.fonction || c.Fonction || "").trim();
+      const key = matricule || nom || '(Inconnu)';
+
+      if (!personMap[key]) {
+        personMap[key] = {
+          matricule,
+          nom: nom || key,
+          fonction: fonction || "-",
+          consultations: 0,
+          rmJours: 0,
+          rmCount: 0
+        };
+      }
+
+      if (fonction && personMap[key].fonction === "-") {
+        personMap[key].fonction = fonction;
+      }
+
+      personMap[key].consultations++;
+
+      const resultat = (c.resultat || '').trim();
+      const jours = parseFloat(c.nbJourRM) || 0;
+      if (resultat === 'Repos médical') {
+        personMap[key].rmJours += jours;
+        personMap[key].rmCount++;
+      }
+    });
+
+    const persons = Object.values(personMap);
+
+    // Top 10 par nombre de consultations
+    const topByConsult = persons.slice().sort((a, b) => b.consultations - a.consultations).slice(0, 10);
+
+    // Top 10 par jours RM (total jours)
+    const topByRM = persons.slice().sort((a, b) => b.rmJours - a.rmJours).slice(0, 10);
+
+    const renderTop10Card = (items, mode) => {
+      if (!items || items.length === 0) {
+        return '<div class="top10-empty">Aucune donnée disponible</div>';
+      }
+
+      const maxValue = items.reduce((max, item) => {
+        const value = mode === "consult" ? item.consultations : item.rmJours;
+        return Math.max(max, value || 0);
+      }, 0) || 1;
+
+      return `
+        <div class="top10-list top10-list--${mode}">
+          ${items.map((it, idx) => {
+            const rank = idx + 1;
+            const mainValue = mode === "consult" ? it.consultations : (it.rmJours || 0).toFixed(1);
+            const subValue = mode === "consult" ? `${(it.rmJours || 0).toFixed(1)} j RM • ${it.rmCount || 0} épisodes RM` : `${it.consultations || 0} consultations • ${it.rmCount || 0} épisodes RM`;
+            const progress = Math.max(8, Math.round((((mode === "consult" ? it.consultations : it.rmJours) || 0) / maxValue) * 100));
+            return `
+              <article class="top10-item top10-item--${rank <= 3 ? 'podium' : 'regular'}">
+                <div class="top10-rank top10-rank--${rank}">${rank}</div>
+                <div class="top10-avatar">${escapeHtml((it.nom || '?').slice(0, 1).toUpperCase())}</div>
+                <div class="top10-content">
+                  <div class="top10-name">${escapeHtml(it.nom || '(Inconnu)')}</div>
+                  <div class="top10-chips">
+                    <span class="top10-chip">Matricule: ${escapeHtml(it.matricule || '-')}</span>
+                    <span class="top10-chip top10-chip--accent">${escapeHtml(it.fonction || '-')}</span>
+                  </div>
+                  <div class="top10-subline">${subValue}</div>
+                  <div class="top10-bar"><span style="width:${progress}%"></span></div>
+                </div>
+                <div class="top10-score">
+                  <div class="top10-score-value">${mainValue}</div>
+                  <div class="top10-score-label">${mode === "consult" ? 'consultations' : 'jours RM'}</div>
+                </div>
+              </article>
+            `;
+          }).join('')}
+        </div>
+      `;
+    };
+
+    const top10ConsultElem = document.getElementById('top10Consultations');
+    const top10RMElem = document.getElementById('top10RM');
+
+    if (top10ConsultElem) {
+      top10ConsultElem.innerHTML = renderTop10Card(topByConsult, 'consult');
+    }
+    if (top10RMElem) {
+      top10RMElem.innerHTML = renderTop10Card(topByRM, 'rm');
+    }
+  }
+
   function updateReportCharts(consultations) {
     // Report charts disabled - not needed
     return;
@@ -4515,6 +4621,7 @@ document.addEventListener("DOMContentLoaded", function () {
       
       if (matrixRattachement) matrixRattachement.innerHTML = generateMatrixTable(rattachementStats);
       if (matrixFonction) matrixFonction.innerHTML = generateMatrixTable(fonctionStats);
+      try { generateTop10(filtered); } catch (e) { /* ignore */ }
     });
   }
 
@@ -4534,6 +4641,7 @@ document.addEventListener("DOMContentLoaded", function () {
       
       if (matrixRattachement) matrixRattachement.innerHTML = generateMatrixTable(rattachementStats);
       if (matrixFonction) matrixFonction.innerHTML = generateMatrixTable(fonctionStats);
+      try { generateTop10(allConsultations); } catch (e) { /* ignore */ }
     });
   }
 
