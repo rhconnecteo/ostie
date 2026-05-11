@@ -306,24 +306,24 @@
 
         <!-- TABLE : EN ATTENTE DE RETOUR -->
         <div class="table-container" style="width: 100%; overflow-x: auto; margin-bottom: 30px;">
-          <table id="pendingWaitingTable" class="pending-table">
+          <table id="pendingWaitingTable" class="pending-table sortable-table">
             <thead>
               <tr>
-                <th>Matricule</th>
-                <th>Nom & Prénom</th>
-                <th>Fonction</th>
-                <th>Type Consultation</th>
-                <th>Lieu</th>
-                <th>Shift</th>
-                <th>Choix</th>
-                <th>Date</th>
-                <th>Heure Sortie</th>
-                <th>Retour?</th>
-                <th>Heure Retour</th>
-                <th>Résultat</th>
-                <th>Nb Jours RM</th>
-                <th>Heure Entrée Ostie</th>
-                <th>Heure Sortie Ostie</th>
+                <th class="sortable-header" data-col="0">Matricule</th>
+                <th class="sortable-header" data-col="1">Nom & Prénom</th>
+                <th class="sortable-header" data-col="2">Fonction</th>
+                <th class="sortable-header" data-col="3">Résultat</th>
+                <th class="sortable-header" data-col="4">Nb Jours RM</th>
+                <th class="sortable-header" data-col="5">Type Consultation</th>
+                <th class="sortable-header" data-col="6">Lieu</th>
+                <th class="sortable-header" data-col="7">Shift</th>
+                <th class="sortable-header" data-col="8">Choix</th>
+                <th class="sortable-header" data-col="9">Date</th>
+                <th class="sortable-header" data-col="10">Heure Sortie</th>
+                <th class="sortable-header" data-col="11">Retour?</th>
+                <th class="sortable-header" data-col="12">Heure Retour</th>
+                <th class="sortable-header" data-col="13">Heure Entrée Ostie</th>
+                <th class="sortable-header" data-col="14">Heure Sortie Ostie</th>
                 <th>Valider</th>
               </tr>
             </thead>
@@ -369,23 +369,23 @@
 
         <!-- TABLE : DÉJÀ RETOURNÉE -->
         <div class="table-container" style="width: 100%; overflow-x: auto;">
-          <table id="pendingCompletedTable" class="pending-table">
+          <table id="pendingCompletedTable" class="pending-table sortable-table">
             <thead>
               <tr>
-                <th>Matricule</th>
-                <th>Nom & Prénom</th>
-                <th>Fonction</th>
-                <th>Type Consultation</th>
-                <th>Lieu</th>
-                <th>Shift</th>
-                <th>Choix</th>
-                <th>Date</th>
-                <th>Heure Sortie</th>
-                <th>Heure Retour</th>
-                <th>Résultat</th>
-                <th>Nb Jours RM</th>
-                <th>Heure Entrée Ostie</th>
-                <th>Heure Sortie Ostie</th>
+                <th class="sortable-header" data-col="0">Matricule</th>
+                <th class="sortable-header" data-col="1">Nom & Prénom</th>
+                <th class="sortable-header" data-col="2">Fonction</th>
+                <th class="sortable-header" data-col="3">Résultat</th>
+                <th class="sortable-header" data-col="4">Nb Jours RM</th>
+                <th class="sortable-header" data-col="5">Type Consultation</th>
+                <th class="sortable-header" data-col="6">Lieu</th>
+                <th class="sortable-header" data-col="7">Shift</th>
+                <th class="sortable-header" data-col="8">Choix</th>
+                <th class="sortable-header" data-col="9">Date</th>
+                <th class="sortable-header" data-col="10">Heure Sortie</th>
+                <th class="sortable-header" data-col="11">Heure Retour</th>
+                <th class="sortable-header" data-col="12">Heure Entrée Ostie</th>
+                <th class="sortable-header" data-col="13">Heure Sortie Ostie</th>
               </tr>
             </thead>
             <tbody id="pendingCompletedTableBody">
@@ -430,24 +430,24 @@
         </div>
         
         <div class="table-container">
-          <table id="todayConsultationsTable" class="report-table" style="width: 100%; font-size: 13px;">
+          <table id="todayConsultationsTable" class="report-table sortable-table" style="width: 100%; font-size: 13px;">
             <thead>
               <tr>
-                <th>Matricule</th>
-                <th>Nom & Prénom</th>
-                <th>Fonction</th>
-                <th>Statut</th>
-                <th>Type Consultation</th>
-                <th>Lieu</th>
-                <th>Shift</th>
-                <th>Choix</th>
-                <th>Date</th>
-                <th>Heure Sortie</th>
-                <th>Heure Retour</th>
-                <th>Résultat</th>
-                <th>Nb Jours RM</th>
-                <th>Heure Entrée Ostie</th>
-                <th>Heure Sortie Ostie</th>
+                <th class="sortable-header" data-col="0">Matricule</th>
+                <th class="sortable-header" data-col="1">Nom & Prénom</th>
+                <th class="sortable-header" data-col="2">Fonction</th>
+                <th class="sortable-header" data-col="3">Statut</th>
+                <th class="sortable-header" data-col="4">Résultat</th>
+                <th class="sortable-header" data-col="5">Nb Jours RM</th>
+                <th class="sortable-header" data-col="6">Type Consultation</th>
+                <th class="sortable-header" data-col="7">Lieu</th>
+                <th class="sortable-header" data-col="8">Shift</th>
+                <th class="sortable-header" data-col="9">Choix</th>
+                <th class="sortable-header" data-col="10">Date</th>
+                <th class="sortable-header" data-col="11">Heure Sortie</th>
+                <th class="sortable-header" data-col="12">Heure Retour</th>
+                <th class="sortable-header" data-col="13">Heure Entrée Ostie</th>
+                <th class="sortable-header" data-col="14">Heure Sortie Ostie</th>
               </tr>
             </thead>
             <tbody id="todayConsultationsBody">
@@ -546,35 +546,35 @@
           <div class="matrix-section">
             <h4>📋 Tableau Détaillé des Consultations</h4>
             <div class="table-container">
-              <table id="reportTable" class="report-table">
+              <table id="reportTable" class="report-table sortable-table">
                 <thead>
                   <tr>
-                    <th>Matricule</th>
-                    <th>Nom & Prénom</th>
-                    <th>Fonction</th>
-                    <th>Type Consultation</th>
-                    <th>Lieu</th>
-                    <th>Shift</th>
-                    <th>Choix</th>
-                    <th>Date</th>
-                    <th>Heure Sortie</th>
-                    <th>Heure Retour</th>
-                    <th>Résultat</th>
-                    <th>Jours RM</th>
+                    <th class="sortable-header" data-col="0">Matricule</th>
+                    <th class="sortable-header" data-col="1">Nom & Prénom</th>
+                    <th class="sortable-header" data-col="2">Fonction</th>
+                    <th class="sortable-header" data-col="3">Résultat</th>
+                    <th class="sortable-header" data-col="4">Jours RM</th>
+                    <th class="sortable-header" data-col="5">Type Consultation</th>
+                    <th class="sortable-header" data-col="6">Lieu</th>
+                    <th class="sortable-header" data-col="7">Shift</th>
+                    <th class="sortable-header" data-col="8">Choix</th>
+                    <th class="sortable-header" data-col="9">Date</th>
+                    <th class="sortable-header" data-col="10">Heure Sortie</th>
+                    <th class="sortable-header" data-col="11">Heure Retour</th>
                   </tr>
                   <tr class="table-filter-row">
                     <th><input type="text" class="filter-col" data-col="0" placeholder="🔍 Matr."></th>
                     <th><input type="text" class="filter-col" data-col="1" placeholder="🔍 Nom"></th>
                     <th><input type="text" class="filter-col" data-col="2" placeholder="🔍 Fonction"></th>
-                    <th><input type="text" class="filter-col" data-col="3" placeholder="🔍 Type"></th>
-                    <th><input type="text" class="filter-col" data-col="4" placeholder="🔍 Lieu"></th>
-                    <th><select class="filter-col" data-col="5"><option value="">Shift</option><option value="Jour">Jour</option><option value="Nuit">Nuit</option></select></th>
-                    <th><select class="filter-col" data-col="6"><option value="">Choix</option><option value="Day off">Day off</option><option value="En poste">En poste</option></select></th>
-                    <th><input type="date" class="filter-col" data-col="7" placeholder="Date"></th>
-                    <th><input type="text" class="filter-col" data-col="8" placeholder="🔍 H. Sortie"></th>
-                    <th><input type="text" class="filter-col" data-col="9" placeholder="🔍 H. Retour"></th>
-                    <th><select class="filter-col" data-col="10"><option value="">Résult.</option><option value="Consultation médical">Consult.</option><option value="Repos médical">Repos</option><option value="Assistante maternelle">Assist.</option></select></th>
-                    <th><input type="number" class="filter-col" data-col="11" placeholder="🔍 Jours" min="0" step="0.5"></th>
+                    <th><select class="filter-col" data-col="3"><option value="">Résult.</option><option value="Consultation médical">Consult.</option><option value="Repos médical">Repos</option><option value="Assistante maternelle">Assist.</option></select></th>
+                    <th><input type="number" class="filter-col" data-col="4" placeholder="🔍 Jours" min="0" step="0.5"></th>
+                    <th><input type="text" class="filter-col" data-col="5" placeholder="🔍 Type"></th>
+                    <th><input type="text" class="filter-col" data-col="6" placeholder="🔍 Lieu"></th>
+                    <th><select class="filter-col" data-col="7"><option value="">Shift</option><option value="Jour">Jour</option><option value="Nuit">Nuit</option></select></th>
+                    <th><select class="filter-col" data-col="8"><option value="">Choix</option><option value="Day off">Day off</option><option value="En poste">En poste</option></select></th>
+                    <th><input type="date" class="filter-col" data-col="9" placeholder="Date"></th>
+                    <th><input type="text" class="filter-col" data-col="10" placeholder="🔍 H. Sortie"></th>
+                    <th><input type="text" class="filter-col" data-col="11" placeholder="🔍 H. Retour"></th>
                   </tr>
                 </thead>
                 <tbody id="reportTableBody">

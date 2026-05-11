@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let waitingPersonnes = [];
   let waitingListRefreshInterval = null; // Pour l'auto-refresh
   let dashboardRefreshInterval = null; // Pour l'auto-refresh du dashboard "Suivi de retours"
+  let dashboardRefreshTimeout = null; // Debounce des refresh manuels du dashboard
   let isAddingToWaiting = false; // Debounce pour éviter les doublons
   let selectingFromWaiting = false; // Debounce pour éviter les doublures de sélection
   let pendingReturnSelection = {}; // État temporaire des checkboxes "Retour?" avant validation
@@ -367,7 +368,12 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function refreshDashboardSoon(delayMs = 300) {
-    setTimeout(() => {
+    if (dashboardRefreshTimeout) {
+      clearTimeout(dashboardRefreshTimeout);
+    }
+
+    dashboardRefreshTimeout = setTimeout(() => {
+      dashboardRefreshTimeout = null;
       void loadDashboardData();
     }, delayMs);
   }
@@ -427,65 +433,25 @@ document.addEventListener("DOMContentLoaded", function () {
     };
   }
 
-  function refreshDashboardSoon(delayMs = 300) {
-    setTimeout(() => {
-      void loadDashboardData();
-    }, delayMs);
+  function findConsultationBySheetRow(rowNumber) {
+    if (!rowNumber) return null;
+    return allConsultations.find(c => String(c.rowNumber || "") === String(rowNumber));
   }
 
-  function applyOptimisticReturnUpdate(row, values) {
-    if (!row) return;
+  function applyReturnOnConsultation(consultation, values) {
+    if (!consultation) return;
 
-    const checkbox = row.querySelector(".checkbox-retour");
-    const timeInput = row.querySelector(".time-retour");
-    const selectResultat = row.querySelector(".select-resultat");
-    const inputJours = row.querySelector(".input-nbjours");
-    const timeEntreeOstie = row.querySelector(".time-entree-ostie");
-    const timeSortieOstie = row.querySelector(".time-sortie-ostie");
-    const btnValidate = row.querySelector(".btn-validate-retour");
-
-    if (checkbox) checkbox.checked = true;
-    if (timeInput) {
-      timeInput.value = values.heureRetour || timeInput.value;
-      timeInput.disabled = false;
-    }
-    if (selectResultat) {
-      selectResultat.value = values.resultat || selectResultat.value;
-      selectResultat.disabled = false;
-    }
-    if (inputJours) {
-      inputJours.value = values.nbJourRM || inputJours.value;
-      inputJours.disabled = !values.nbJourRM && inputJours.disabled;
-      if (values.nbJourRM) inputJours.style.display = "inline-block";
-    }
-    if (timeEntreeOstie) {
-      timeEntreeOstie.value = values.heureEntreeOstie || timeEntreeOstie.value;
-      timeEntreeOstie.disabled = false;
-    }
-    if (timeSortieOstie) {
-      timeSortieOstie.value = values.heureSortieOstie || timeSortieOstie.value;
-      timeSortieOstie.disabled = false;
-    }
-    if (btnValidate) {
-      btnValidate.disabled = true;
-      btnValidate.textContent = "✓";
-    }
+    consultation.heureRetour = values.heureRetour || consultation.heureRetour || "";
+    consultation.resultat = values.resultat || consultation.resultat || "";
+    consultation.nbJourRM = values.nbJourRM || "";
+    consultation.heureEntreeOstie = values.heureEntreeOstie || "";
+    consultation.heureSortieOstie = values.heureSortieOstie || "";
   }
 
-  function collectReturnValues(row) {
-    const timeInput = row.querySelector(".time-retour");
-    const selectResultat = row.querySelector(".select-resultat");
-    const inputJours = row.querySelector(".input-nbjours");
-    const timeEntreeOstie = row.querySelector(".time-entree-ostie");
-    const timeSortieOstie = row.querySelector(".time-sortie-ostie");
-
-    return {
-      heureRetour: timeInput?.value || "",
-      resultat: selectResultat?.value || "",
-      nbJourRM: inputJours?.value || "",
-      heureEntreeOstie: timeEntreeOstie?.value || "",
-      heureSortieOstie: timeSortieOstie?.value || ""
-    };
+  function refreshDashboardFromLocalState() {
+    updateStatistics();
+    updatePendingList();
+    updateTodayConsultationsTable();
   }
 
   function countWeeklyConsultationsForMatricule(matricule, referenceDateStr) {
@@ -2943,6 +2909,12 @@ document.addEventListener("DOMContentLoaded", function () {
           inputJours.focus();
           return;
         }
+
+        if (!timeInput.value) {
+          showMessage("❌ Veuillez renseigner l'heure de retour", "error");
+          timeInput.focus();
+          return;
+        }
         
         // Récupérer les temps Ostie
         const timeEntreeOstie = row.querySelector(".time-entree-ostie");
@@ -2960,33 +2932,46 @@ document.addEventListener("DOMContentLoaded", function () {
           heureSortieOstie: timeSortieOstie?.value || ""
         });
 
+        const optimisticValues = {
+          heureRetour: returnValues.heureRetour || timeInput.value,
+          resultat: selectedResult,
+          nbJourRM: inputJours.value || "",
+          heureEntreeOstie: timeEntreeOstie?.value || "",
+          heureSortieOstie: timeSortieOstie?.value || ""
+        };
+
+        const targetConsultation = findConsultationBySheetRow(sheetRow);
+        const previousConsultation = targetConsultation ? { ...targetConsultation } : null;
+
         try {
           this.disabled = true;
           this.textContent = "⏳ Enregistrement...";
-          applyOptimisticReturnUpdate(row, returnValues);
+          if (targetConsultation) {
+            applyReturnOnConsultation(targetConsultation, optimisticValues);
+            refreshDashboardFromLocalState();
+          } else {
+            applyOptimisticReturnUpdate(row, optimisticValues);
+          }
 
-          fetch(`${API_URL}?${params}`)
-            .then(async res => {
-              const json = await res.json();
-              if (!json.success) {
-                throw new Error(json.error || "Erreur inconnue");
-              }
-              delete pendingReturnSelection[sheetRow || matricule];
-              // ✅ Actualisation des données après sauvegarde réussie
-              showMessage("✅ Retour enregistré, actualisation en cours...");
-              refreshDashboardSoon(150);
-            })
-            .catch(error => {
-              console.error("Erreur enregistrement retour:", error);
-              showMessage("❌ Erreur : " + error.message, "error");
-              // Reset button on error so user knows something went wrong
-              this.disabled = false;
-              this.textContent = "✓ Valider";
-              refreshDashboardSoon(300);
-            });
+          const res = await fetch(`${API_URL}?${params}`);
+          const json = await res.json();
+          if (!json.success) {
+            throw new Error(json.error || "Erreur inconnue");
+          }
+
+          delete pendingReturnSelection[sheetRow || matricule];
+          showMessage("✅ Retour enregistré");
+          // Synchronisation arrière-plan (sans bloquer le déplacement immédiat en UI)
+          refreshDashboardSoon(1200);
         } catch (e) {
           console.error("Erreur:", e);
-          showMessage("❌ Erreur serveur", "error");
+
+          if (targetConsultation && previousConsultation) {
+            Object.assign(targetConsultation, previousConsultation);
+            refreshDashboardFromLocalState();
+          }
+
+          showMessage("❌ Erreur : " + (e.message || "serveur"), "error");
           this.disabled = false;
           this.textContent = "✓ Valider";
           refreshDashboardSoon(300);
@@ -4920,4 +4905,82 @@ document.addEventListener("DOMContentLoaded", function () {
     
     return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0");
   }
+
+  // ================= TABLE SORTING FUNCTIONALITY =================
+  // Initialize sortable headers on page load
+  function initializeSortableHeaders() {
+    document.querySelectorAll(".sortable-table").forEach(table => {
+      const headers = table.querySelectorAll("th.sortable-header");
+      headers.forEach(header => {
+        header.style.cursor = "pointer";
+        header.title = "Cliquer pour trier";
+        
+        header.addEventListener("click", function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const colIndex = parseInt(this.getAttribute("data-col"));
+          const tbody = table.querySelector("tbody");
+          if (!tbody) return;
+          
+          // Get all rows
+          const rows = Array.from(tbody.querySelectorAll("tr"));
+          
+          // Determine sort direction
+          const isCurrentSorted = this.classList.contains("sorted-asc") || this.classList.contains("sorted-desc");
+          const shouldReverse = this.classList.contains("sorted-asc");
+          
+          // Remove sort indicators from all headers in this table
+          table.querySelectorAll("th.sortable-header").forEach(h => {
+            h.classList.remove("sorted-asc", "sorted-desc");
+          });
+          
+          // Sort rows
+          rows.sort((a, b) => {
+            const cellA = a.cells[colIndex];
+            const cellB = b.cells[colIndex];
+            
+            if (!cellA || !cellB) return 0;
+            
+            let valueA = cellA.textContent.trim();
+            let valueB = cellB.textContent.trim();
+            
+            // Try numeric sort
+            const numA = parseFloat(valueA);
+            const numB = parseFloat(valueB);
+            
+            let comparison = 0;
+            if (!isNaN(numA) && !isNaN(numB)) {
+              comparison = numA - numB;
+            } else {
+              comparison = valueA.localeCompare(valueB, 'fr');
+            }
+            
+            return shouldReverse ? -comparison : comparison;
+          });
+          
+          // Re-render table with sorted rows
+          tbody.innerHTML = "";
+          rows.forEach(row => {
+            tbody.appendChild(row);
+          });
+          
+          // Add sort indicator to current header
+          if (shouldReverse) {
+            this.classList.add("sorted-desc");
+          } else {
+            this.classList.add("sorted-asc");
+          }
+          
+          // Re-attach event listeners if needed
+          if (table.id === "pendingWaitingTable" || table.id === "pendingCompletedTable") {
+            attachPendingActionListeners();
+          }
+        });
+      });
+    });
+  }
+
+  // Initialize sortable headers when DOM is ready
+  initializeSortableHeaders();
 }); // Fermeture du addEventListener("DOMContentLoaded", function () { ... })

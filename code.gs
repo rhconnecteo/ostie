@@ -304,22 +304,67 @@ function getConsultations() {
 function ensureColumnsExist() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName("OSTIE");
-  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const lastCol = sheet.getLastColumn();
+  const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   
   // Vérifier si les colonnes existent déjà
-  const hasHeureEntreeOstie = headerRow.some(h => h === "Heure Entrée Ostie" || h === "heureEntreeOstie");
-  const hasHeureSortieOstie = headerRow.some(h => h === "Heure Sortie Ostie" || h === "heureSortieOstie");
+  let heureEntreeOstieCol = headerRow.findIndex(h => h === "Heure Entrée Ostie" || h === "heureEntreeOstie") + 1;
+  let heureSortieOstieCol = headerRow.findIndex(h => h === "Heure Sortie Ostie" || h === "heureSortieOstie") + 1;
   
   // Ajouter les colonnes si manquantes
-  if (!hasHeureEntreeOstie) {
-    const lastCol = sheet.getLastColumn() + 1;
-    sheet.getRange(1, lastCol).setValue("Heure Entrée Ostie");
+  if (!heureEntreeOstieCol) {
+    heureEntreeOstieCol = sheet.getLastColumn() + 1;
+    sheet.getRange(1, heureEntreeOstieCol).setValue("Heure Entrée Ostie");
   }
   
-  if (!hasHeureSortieOstie) {
-    const lastCol = sheet.getLastColumn() + 1;
-    sheet.getRange(1, lastCol).setValue("Heure Sortie Ostie");
+  if (!heureSortieOstieCol) {
+    heureSortieOstieCol = sheet.getLastColumn() + 1;
+    sheet.getRange(1, heureSortieOstieCol).setValue("Heure Sortie Ostie");
   }
+
+  const cache = CacheService.getScriptCache();
+  cache.put("ostie_time_cols", JSON.stringify({
+    heureEntreeOstieCol,
+    heureSortieOstieCol,
+    sheetName: "OSTIE"
+  }), 21600);
+
+  return { heureEntreeOstieCol, heureSortieOstieCol };
+}
+
+function getOstieTimeColumns_(sheet) {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("ostie_time_cols");
+
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed && parsed.heureEntreeOstieCol && parsed.heureSortieOstieCol) {
+        return {
+          heureEntreeOstieCol: parsed.heureEntreeOstieCol,
+          heureSortieOstieCol: parsed.heureSortieOstieCol
+        };
+      }
+    } catch (e) {
+      // Cache corrompu: recalculer
+    }
+  }
+
+  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const heureEntreeOstieCol = headerRow.findIndex(h => h === "Heure Entrée Ostie" || h === "heureEntreeOstie") + 1;
+  const heureSortieOstieCol = headerRow.findIndex(h => h === "Heure Sortie Ostie" || h === "heureSortieOstie") + 1;
+
+  if (heureEntreeOstieCol && heureSortieOstieCol) {
+    cache.put("ostie_time_cols", JSON.stringify({
+      heureEntreeOstieCol,
+      heureSortieOstieCol,
+      sheetName: "OSTIE"
+    }), 21600);
+
+    return { heureEntreeOstieCol, heureSortieOstieCol };
+  }
+
+  return ensureColumnsExist();
 }
 
 // ================= SAVE CONSULTATION =================
@@ -401,11 +446,17 @@ function saveConsultation(d) {
 
 // ================= SET RETOUR =================
 function setRetour(d) {
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(5000)) {
+    throw new Error("Système occupé, merci de réessayer.");
+  }
+
+  try {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName("OSTIE");
   
-  // ========== ÉTAPE 1: CRÉER LES COLONNES SI MANQUANTES ==========
-  ensureColumnsExist();
+  // ========== ÉTAPE 1: CRÉER/RÉSOUDRE LES COLONNES SI MANQUANTES ==========
+  const { heureEntreeOstieCol, heureSortieOstieCol } = getOstieTimeColumns_(sheet);
 
   const rowNumber = parseInt(d.rowNumber, 10);
   if (Number.isFinite(rowNumber) && rowNumber > 1) {
@@ -425,23 +476,6 @@ function setRetour(d) {
 
   if (heureRetourExistante !== "") {
     throw new Error(`Retour déjà enregistré pour ${d.matricule}`);
-  }
-
-  // Déterminer les index précis des colonnes Q et R
-  const lastCol = sheet.getLastColumn();
-  const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  
-  let heureEntreeOstieCol = 17; // Par défaut Colonne Q = 17
-  let heureSortieOstieCol = 18; // Par défaut Colonne R = 18
-  
-  // Trouver les vraies colonnes
-  for (let col = 0; col < headerRow.length; col++) {
-    if (headerRow[col] === "Heure Entrée Ostie" || headerRow[col] === "heureEntreeOstie") {
-      heureEntreeOstieCol = col + 1;
-    }
-    if (headerRow[col] === "Heure Sortie Ostie" || headerRow[col] === "heureSortieOstie") {
-      heureSortieOstieCol = col + 1;
-    }
   }
   
   // Sauvegarder toutes les données avec moins d'appels serveur
@@ -464,16 +498,12 @@ function setRetour(d) {
     sheet.getRange(rowNumber, heureSortieOstieCol).setValue(d.heureSortieOstie || "");
   }
 
-  // Marquer la ligne comme validée après écriture réussie pour éviter les doublons d'affichage
-  if (sheet.getLastColumn() >= 16) {
-    try {
-      sheet.getRange(rowNumber, 16).setValue(d.casGrave || "non");
-    } catch (e) {
-      console.warn("Impossible de mettre à jour le cas grave: " + e);
-    }
-  }
+  SpreadsheetApp.flush();
 
   console.log(`✅ Retour enregistré pour ${d.matricule}`);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ================= SET TEMPS OSTIE =================
@@ -482,7 +512,7 @@ function setTempsOstie(d) {
   const sheet = ss.getSheetByName("OSTIE");
   
   // ========== ÉTAPE 1: CRÉER LES COLONNES SI MANQUANTES ==========
-  ensureColumnsExist();
+  const { heureEntreeOstieCol, heureSortieOstieCol } = getOstieTimeColumns_(sheet);
 
   const rowNumber = parseInt(d.rowNumber, 10);
   if (Number.isFinite(rowNumber) && rowNumber > 1) {
@@ -497,23 +527,6 @@ function setTempsOstie(d) {
     throw new Error("Numéro de ligne invalide");
   }
 
-  // Déterminer les index précis des colonnes Q et R
-  const lastCol = sheet.getLastColumn();
-  const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  
-  let heureEntreeOstieCol = 17; // Par défaut Colonne Q = 17
-  let heureSortieOstieCol = 18; // Par défaut Colonne R = 18
-  
-  // Trouver les vraies colonnes
-  for (let col = 0; col < headerRow.length; col++) {
-    if (headerRow[col] === "Heure Entrée Ostie" || headerRow[col] === "heureEntreeOstie") {
-      heureEntreeOstieCol = col + 1;
-    }
-    if (headerRow[col] === "Heure Sortie Ostie" || headerRow[col] === "heureSortieOstie") {
-      heureSortieOstieCol = col + 1;
-    }
-  }
-  
   if (heureEntreeOstieCol === heureSortieOstieCol - 1) {
     sheet.getRange(rowNumber, heureEntreeOstieCol, 1, 2).setValues([[
       d.heureEntreeOstie || "",
