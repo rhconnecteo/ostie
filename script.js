@@ -355,6 +355,34 @@ document.addEventListener("DOMContentLoaded", function () {
     return text.charAt(0).toUpperCase() + text.slice(1);
   }
 
+  function normalizeResultLabel(value) {
+    if (value === null || value === undefined) return "-";
+
+    const text = String(value).trim().toLowerCase();
+    if (!text) return "-";
+
+    if (text.includes("consultation")) return "Consultation médicale";
+    if (text.includes("repos")) return "Repos médical";
+    if (text.includes("assistante maternelle")) return "Assistante maternelle";
+    if (text.includes("exam")) return "Examens médicaux";
+    if (text.includes("day off")) return "Day Off";
+
+    return toSentenceCaseLabel(value);
+  }
+
+  function formatNbJourRM(value) {
+    if (value === null || value === undefined || value === "") return "-";
+
+    const numericValue = Number(String(value).replace(",", "."));
+    if (Number.isNaN(numericValue)) {
+      return String(value).trim();
+    }
+
+    return Number.isInteger(numericValue)
+      ? String(numericValue)
+      : numericValue.toFixed(1).replace(".", ",");
+  }
+
   function downloadTextFile(content, fileName, mimeType = "text/csv;charset=utf-8;") {
     const blob = new Blob(["\ufeff" + content], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -2147,6 +2175,8 @@ document.addEventListener("DOMContentLoaded", function () {
       const hasRetour = heureRetour && heureRetour.trim() !== "";
       const statut = hasRetour ? "Déjà retourné" : "En attente";
       const statutClass = hasRetour ? "statut-deja" : "statut-en-attente";
+      const resultat = normalizeResultLabel(c.resultat || c.Resultat || c.RESULTAT || "");
+      const nbJourRM = formatNbJourRM(c.nbJourRM || c.nb_jour_rm || c.NbJourRM || c.NB_JOUR_RM);
 
       return `
         <tr>
@@ -2154,6 +2184,8 @@ document.addEventListener("DOMContentLoaded", function () {
           <td>${c.nom || ''}${c.prenom ? ' ' + c.prenom : ''}</td>
           <td>${c.fonction || ''}</td>
           <td><span class="statut-badge ${statutClass}">${statut}</span></td>
+          <td>${resultat}</td>
+          <td>${nbJourRM}</td>
           <td>${c.type_consultation || c.typeConsultation || ''}</td>
           <td>${c.lieu_consultation || c.lieuConsultation || ''}</td>
           <td>${c.shift || ''}</td>
@@ -2161,8 +2193,6 @@ document.addEventListener("DOMContentLoaded", function () {
           <td>${extractAndCorrectDate(c.date) || ''}</td>
           <td>${extractTimeFromISO(c.heure_sortie || c.heureSortie)}</td>
           <td>${hasRetour ? extractTimeFromISO(heureRetour) : '--'}</td>
-          <td>${c.resultat || '--'}</td>
-          <td>${c.nbJourRM || c.nb_jour_rm || '--'}</td>
           <td>${c.heureEntreeOstie || c.heure_entree_ostie || '--'}</td>
           <td>${c.heureSortieOstie || c.heure_sortie_ostie || '--'}</td>
         </tr>
@@ -2558,6 +2588,8 @@ document.addEventListener("DOMContentLoaded", function () {
             row.dataset.sheetRow = sheetRow;
             
             const fonction = c.fonction || c.function || "";
+            const resultat = normalizeResultLabel(c.resultat || c.Resultat || c.RESULTAT || "");
+            const nbJourRM = formatNbJourRM(c.nbJourRM || c.NbJourRM || c.NB_JOUR_RM || "");
             const typeConsultation = c.typeConsultation || c.type_consultation || "";
             const lieuConsultation = c.lieuConsultation || c.lieu_consultation || "";
             const heureSortie = c.heureSortie || c.heure_sortie || c.heuresortie || "";
@@ -2566,6 +2598,8 @@ document.addEventListener("DOMContentLoaded", function () {
               <td>${c.matricule}</td>
               <td>${c.nom} ${c.prenom || ""}</td>
               <td>${fonction}</td>
+              <td>${resultat}</td>
+              <td>${nbJourRM}</td>
               <td>${typeConsultation}</td>
               <td>${lieuConsultation}</td>
               <td>${c.shift || ""}</td>
@@ -2606,10 +2640,14 @@ document.addEventListener("DOMContentLoaded", function () {
     } else {
       completedList.forEach(c => {
         const row = document.createElement("tr");
+        const resultat = normalizeResultLabel(c.resultat || c.Resultat || c.RESULTAT || "");
+        const nbJourRM = formatNbJourRM(c.nbJourRM || c.NbJourRM || c.NB_JOUR_RM || "");
         row.innerHTML = `
           <td>${c.matricule}</td>
           <td>${c.nom} ${c.prenom || ""}</td>
           <td>${c.fonction}</td>
+          <td>${resultat}</td>
+          <td>${nbJourRM}</td>
           <td>${c.typeConsultation}</td>
           <td>${c.lieuConsultation}</td>
           <td>${c.shift}</td>
@@ -2617,8 +2655,6 @@ document.addEventListener("DOMContentLoaded", function () {
           <td>${extractAndCorrectDate(c.date) || "-"}</td>
           <td>${extractTimeFromISO(c.heureSortie)}</td>
           <td>${extractTimeFromISO(c.heureRetour) || "-"}</td>
-          <td>${getResultatRetourLabel(c.resultat) || "-"}</td>
-          <td>${c.nbJourRM || "-"}</td>
           <td>${c.heureEntreeOstie ? extractTimeFromISO(c.heureEntreeOstie) : "-"}</td>
           <td>${c.heureSortieOstie ? extractTimeFromISO(c.heureSortieOstie) : "-"}</td>
         `;
@@ -3394,6 +3430,8 @@ document.addEventListener("DOMContentLoaded", function () {
           <td>${c.matricule}</td>
           <td>${c.nom} ${c.prenom || ""}</td>
           <td>${c.fonction}</td>
+          <td>${normalizeResultLabel(c.resultat)}</td>
+          <td>${formatNbJourRM(c.nbJourRM)}</td>
           <td>${c.typeConsultation}</td>
           <td>${c.lieuConsultation}</td>
           <td>${c.shift}</td>
@@ -3401,8 +3439,6 @@ document.addEventListener("DOMContentLoaded", function () {
           <td>${extractAndCorrectDate(c.date)}</td>
           <td>${extractTimeFromISO(c.heureSortie)}</td>
           <td>${c.heureRetour ? extractTimeFromISO(c.heureRetour) : "-"}</td>
-          <td>${c.resultat || "-"}</td>
-          <td>${c.nbJourRM || "-"}</td>
         `;
         reportTableBody.appendChild(row);
       });
