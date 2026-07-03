@@ -44,7 +44,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ================= LOCAL LOGIN CONFIG =================
   // Login uniquement côté client (code.gs reste API seulement)
-  const ALLOWED_USERNAMES = ["zélie", "miary", "fenitra"];
+  const ALLOWED_USERNAMES = ["zélie", "miary", "fenitra","sirius"];
   const LOGIN_PASSWORD = "Ostie";
 
   // Restaurer la session locale si disponible
